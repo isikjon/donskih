@@ -15,14 +15,12 @@ class BaseTab extends StatelessWidget {
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
-          child: Text('База', style: AppTypography.headlineSmall),
+          child: Text('База Знаний', style: AppTypography.headlineSmall),
         ),
         Expanded(
           child: ListView(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             children: [
-              Text('То с чего начать', style: AppTypography.titleMedium),
-              const SizedBox(height: 12),
               AppExpandableBlock(
                 title: 'Видео Урок 1',
                 icon: Icons.play_circle_outline,
@@ -237,8 +235,16 @@ class _SubLessonCard extends StatelessWidget {
             color: AppColors.surfaceSecondary,
             borderRadius: BorderRadius.circular(AppSpacing.radiusSmall),
           ),
-          child: const Center(
-            child: Icon(Icons.play_circle_filled, color: AppColors.textTertiary, size: 28),
+          child: Center(
+            child: Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.play_arrow_rounded, color: AppColors.primary, size: 20),
+            ),
           ),
         ),
         const SizedBox(width: 12),

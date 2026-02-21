@@ -85,14 +85,18 @@ class _ChatTabState extends State<ChatTab> {
             },
           ),
         ),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          decoration: const BoxDecoration(
-            color: AppColors.surface,
-            border: Border(top: BorderSide(color: AppColors.border, width: 0.5)),
+        Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom > 0
+                ? MediaQuery.of(context).viewInsets.bottom
+                : 80,
           ),
-          child: SafeArea(
-            top: false,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: const BoxDecoration(
+              color: AppColors.surface,
+              border: Border(top: BorderSide(color: AppColors.border, width: 0.5)),
+            ),
             child: Row(
               children: [
                 IconButton(
@@ -131,7 +135,7 @@ class _ChatTabState extends State<ChatTab> {
                       color: AppColors.primary,
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(Icons.arrow_upward_rounded, color: Colors.white, size: 20),
+                    child: const Icon(Icons.arrow_upward_rounded, color: AppColors.textOnPrimary, size: 20),
                   ),
                 ),
               ],
@@ -177,14 +181,14 @@ class _MessageBubble extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
-                color: message.isMe ? AppColors.primary : AppColors.surface,
+                color: message.isMe ? AppColors.myMessage : AppColors.otherMessage,
                 borderRadius: BorderRadius.only(
                   topLeft: const Radius.circular(16),
                   topRight: const Radius.circular(16),
                   bottomLeft: Radius.circular(message.isMe ? 16 : 4),
                   bottomRight: Radius.circular(message.isMe ? 4 : 16),
                 ),
-                border: message.isMe ? null : Border.all(color: AppColors.border, width: 0.5),
+                border: Border.all(color: AppColors.border, width: 0.5),
                 boxShadow: const [
                   BoxShadow(color: AppColors.shadow, blurRadius: 4, offset: Offset(0, 1)),
                 ],
@@ -203,7 +207,7 @@ class _MessageBubble extends StatelessWidget {
                   Text(
                     message.text,
                     style: AppTypography.bodyMedium.copyWith(
-                      color: message.isMe ? Colors.white : AppColors.textPrimary,
+                      color: AppColors.textPrimary,
                     ),
                   ),
                   const SizedBox(height: 3),
@@ -213,7 +217,7 @@ class _MessageBubble extends StatelessWidget {
                       message.time,
                       style: AppTypography.labelSmall.copyWith(
                         fontSize: 10,
-                        color: message.isMe ? Colors.white70 : AppColors.textTertiary,
+                        color: AppColors.textTertiary,
                       ),
                     ),
                   ),

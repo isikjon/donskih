@@ -20,7 +20,7 @@ class AppBottomNav extends StatelessWidget {
       margin: EdgeInsets.only(
         left: mq.size.width * 0.15,
         right: mq.size.width * 0.15,
-        bottom: mq.padding.bottom + 16,
+        bottom: mq.padding.bottom + 8,
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(40),
@@ -57,23 +57,25 @@ class AppBottomNav extends StatelessWidget {
                     ),
                     Row(
                       children: [
-                        _NavItem(
+                    _NavItem(
                           icon: Icons.home_outlined,
                           activeIcon: Icons.home_rounded,
                           isActive: currentIndex == 0,
                           onTap: () => onTap(0),
+                          showDot: true,
                         ),
-                        _NavItem(
-                          icon: Icons.school_outlined,
-                          activeIcon: Icons.school_rounded,
+                    _NavItem(
+                          icon: Icons.auto_stories_outlined,
+                          activeIcon: Icons.auto_stories_rounded,
                           isActive: currentIndex == 1,
                           onTap: () => onTap(1),
                         ),
-                        _NavItem(
+                    _NavItem(
                           icon: Icons.chat_bubble_outline_rounded,
                           activeIcon: Icons.chat_bubble_rounded,
                           isActive: currentIndex == 2,
                           onTap: () => onTap(2),
+                          showDot: true,
                         ),
                         _ProfileNavItem(
                           isActive: currentIndex == 3,
@@ -117,12 +119,14 @@ class _NavItem extends StatelessWidget {
   final IconData activeIcon;
   final bool isActive;
   final VoidCallback onTap;
+  final bool showDot;
 
   const _NavItem({
     required this.icon,
     required this.activeIcon,
     required this.isActive,
     required this.onTap,
+    this.showDot = false,
   });
 
   @override
@@ -133,17 +137,35 @@ class _NavItem extends StatelessWidget {
         child: SizedBox(
           height: 46,
           child: Center(
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 200),
-              transitionBuilder: (child, animation) {
-                return ScaleTransition(scale: animation, child: child);
-              },
-              child: Icon(
-                isActive ? activeIcon : icon,
-                key: ValueKey(isActive),
-                color: isActive ? AppColors.primary : AppColors.textTertiary,
-                size: 26,
-              ),
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 200),
+                  transitionBuilder: (child, animation) {
+                    return ScaleTransition(scale: animation, child: child);
+                  },
+                  child: Icon(
+                    isActive ? activeIcon : icon,
+                    key: ValueKey(isActive),
+                    color: isActive ? AppColors.primary : AppColors.textTertiary,
+                    size: 26,
+                  ),
+                ),
+                if (showDot)
+                  Positioned(
+                    top: -2,
+                    right: -4,
+                    child: Container(
+                      width: 8,
+                      height: 8,
+                      decoration: const BoxDecoration(
+                        color: AppColors.primary,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
         ),
