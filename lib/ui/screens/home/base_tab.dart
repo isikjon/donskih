@@ -22,40 +22,66 @@ class BaseTab extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 20),
             children: [
               AppExpandableBlock(
-                title: 'Видео Урок 1',
+                title: 'Видео Урок 1: Макияж Clean Girl с акцентом на сияющую здоровую кожу',
                 icon: Icons.play_circle_outline,
                 preview: _LessonPreview(index: 1),
                 content: Column(
                   children: [
                     _SubLessonCard(
-                      title: 'Подготовка кожи к макияжу',
+                      title: 'Уход',
                       products: const [
-                        _ProductData('Праймер VIVIENNE SABO', 'https://goldapple.ru'),
-                        _ProductData('Тональный крем L\'OREAL Paris infallible', 'https://wildberries.ru'),
+                        _ProductData('CLARINS lotion tonique apaisante', 'https://goldapple.ru/19760334995-lotion-tonique-apaisante'),
+                        _ProductData('ART & FACT 3D Hyaluronic Acid', 'https://goldapple.ru/19000039339-3d-hyaluronic-acid-2-provitamin-b5-moisturizing-biorevitalization-effect'),
+                        _ProductData('ORIKO Крем для лица', 'https://ozon.ru/t/baTZ97r'),
+                        _ProductData('DERMA FACTORY Стик', 'https://www.wildberries.ru/catalog/146474923/detail.aspx?size=246545503'),
                       ],
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 16),
+                    _SubLessonCard(
+                      title: 'Нанесение тона и консилера',
+                      products: const [
+                        _ProductData('CHARLOTTE TILBURY Hollywood Filter', 'https://www.charlottetilbury.com/us/product/hollywood-flawless-filter-shade-4-5-medium'),
+                        _ProductData('CATRICE Soft Glam Filter', 'https://goldapple.ru/19000263133-soft-glam-filter-fluid'),
+                        _ProductData('BELOR DESIGN Funhouse Skin', 'https://goldapple.ru/19000187196-funhouse-skin-teen'),
+                        _ProductData('NATALYA SHIK Concealer', 'https://goldapple.ru/19000334042-concealer-blurring-effect'),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    _SubLessonCard(
+                      title: 'Скульптурирование лица',
+                      products: const [
+                        _ProductData('RARE BEAUTY Румяна Hope', 'https://www.rarebeauty.com/?srsltid=AfmBOooPMJHnLXcBupTDWBxNwFthUHCw7kfjucNyfEqSrhCcYLvYEPE2'),
+                        _ProductData('OK BEAUTY Color Salute Safari', 'https://goldapple.ru/15840800001-color-salute'),
+                        _ProductData('CHARLOTTE TILBURY Beauty Light Wand', 'https://www.charlottetilbury.com/us/product/hollywood-beauty-light-wand-highlighter'),
+                        _ProductData('STELLARY Cashmere Blush', 'https://goldapple.ru/19000374454-cashmere-blush'),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
                     _SubLessonCard(
                       title: 'Макияж бровей',
                       products: const [
-                        _ProductData('Карандаш VIVIENNE SABO brow arcade slim 01', 'https://goldapple.ru'),
-                        _ProductData('Гель CLIMTCOSMETICS brow fix gel', 'https://wildberries.ru'),
+                        _ProductData('VIVIENNE SABO Brow Arcade', 'https://goldapple.ru/3226300001-brow-arcade-slim'),
+                        _ProductData('LUXVISAGE Brow Laminator', 'https://goldapple.ru/19000314269-brow-laminator-extreme-fix-24h'),
                       ],
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 16),
                     _SubLessonCard(
                       title: 'Макияж глаз',
                       products: const [
-                        _ProductData('Тени SISLEY phyto-eye twist 9 pearl', 'https://goldapple.ru'),
-                        _ProductData('Палетка DIOR diorshow 5 couleurs', 'https://goldapple.ru'),
+                        _ProductData('STELLARY Mousse Highlighter', 'https://goldapple.ru/19000374458-mousse-highlighter-rich-glow'),
+                        _ProductData('CATRICE Sun Lover Bronzer', 'https://goldapple.ru/69987500001-sun-lover-glow-bronzing-powder'),
+                        _ProductData('SHIKSTUDIO Kajal Liner 02', 'https://goldapple.ru/70062600002-kajal-liner'),
+                        _ProductData('ROMANOVAMAKEUP Sexy Eyeshadow', 'https://goldapple.ru/19000174507-sexy-eyeshadow-palette'),
+                        _ProductData('ESSENCE Lash Brown Mascara', 'https://goldapple.ru/19000282960-lash-without-limits-brown-extreme-lengthening-volume'),
                       ],
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 16),
                     _SubLessonCard(
                       title: 'Макияж губ',
                       products: const [
-                        _ProductData('Карандаш VIVIENNE SABO Le Grand Volume', 'https://goldapple.ru'),
-                        _ProductData('Помада L\'OREAL Paris color riche', 'https://wildberries.ru'),
+                        _ProductData('LOVE GENERATION Lip Pencil 09', 'https://goldapple.ru/19000251663-lip-pencil'),
+                        _ProductData('VIVIENNE SABO Le Grand Volume 01', 'https://goldapple.ru/19760304887-le-grand-volume'),
+                        _ProductData('SHIKSTUDIO Intense Gloss 04', 'https://goldapple.ru/19000058261-intense'),
                       ],
                     ),
                   ],
@@ -63,29 +89,46 @@ class BaseTab extends StatelessWidget {
               ),
               const SizedBox(height: 10),
               AppExpandableBlock(
-                title: 'Видео Урок 2',
+                title: 'Видео Урок 2: Какие кисти должны быть в косметичке',
                 icon: Icons.play_circle_outline,
                 preview: _LessonPreview(index: 2),
                 content: Column(
                   children: [
                     _SubLessonCard(
-                      title: 'Очищение кожи',
+                      title: 'Кисти для тона и кремовых продуктов',
                       products: const [
-                        _ProductData('Гель CERAVE', 'https://goldapple.ru'),
-                        _ProductData('Мицеллярная вода BIODERMA sensibio', 'https://wildberries.ru'),
+                        _ProductData('NATALYA SHIK Foundation & Sculptor', 'https://goldapple.ru/19000386766-brush-03-foundation-sculptor'),
                       ],
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 16),
                     _SubLessonCard(
-                      title: 'Тонизирование',
-                      products: const [_ProductData('Тоник LA ROCHE-POSAY', 'https://goldapple.ru')],
-                    ),
-                    const SizedBox(height: 12),
-                    _SubLessonCard(
-                      title: 'Увлажнение',
+                      title: 'Кисти для сухих продуктов',
                       products: const [
-                        _ProductData('Крем CERAVE увлажняющий', 'https://goldapple.ru'),
-                        _ProductData('Сыворотка THE ORDINARY hyaluronic acid', 'https://wildberries.ru'),
+                        _ProductData('NATALYA SHIK Powder Brush', 'https://goldapple.ru/19000386764-brush-01-powder'),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    _SubLessonCard(
+                      title: 'Кисти для теней и растушевки',
+                      products: const [
+                        _ProductData('NATALYA SHIK Blending Eyeshadow', 'https://goldapple.ru/19000386768-brush-05-blending-eyeshadow'),
+                        _ProductData('MANLY PRO К53', 'https://goldapple.ru/19000323328-round-pencil-brush-for-shadows-and-eyeliner'),
+                        _ProductData('PIMINOVA VALERY GS3', 'https://goldapple.ru/19000065740-gs3'),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    _SubLessonCard(
+                      title: 'Кисть для подчищений и стрел',
+                      products: const [
+                        _ProductData('VIVIENNE SABO Sexy Look', 'https://goldapple.ru/19760331864-sexy-look'),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    _SubLessonCard(
+                      title: 'Спонж и точилки',
+                      products: const [
+                        _ProductData('Спонж для макияжа', '#'),
+                        _ProductData('Точилка для карандашей', '#'),
                       ],
                     ),
                   ],
@@ -93,45 +136,33 @@ class BaseTab extends StatelessWidget {
               ),
               const SizedBox(height: 10),
               AppExpandableBlock(
-                title: 'Видео Урок 3',
+                title: 'Видео Урок 3: Как ухаживать за кистями',
                 icon: Icons.play_circle_outline,
                 preview: _LessonPreview(index: 3),
                 content: Column(
                   children: [
                     _SubLessonCard(
-                      title: 'Подготовка волос',
-                      products: const [_ProductData('Термозащита MOROCCANOIL', 'https://goldapple.ru')],
-                    ),
-                    const SizedBox(height: 12),
-                    _SubLessonCard(
-                      title: 'Укладка феном',
-                      products: const [_ProductData('Мусс WELLA professionals', 'https://wildberries.ru')],
-                    ),
-                    const SizedBox(height: 12),
-                    _SubLessonCard(
-                      title: 'Фиксация',
-                      products: const [_ProductData('Лак L\'OREAL Paris elnett', 'https://wildberries.ru')],
+                      title: 'Памятка по уходу',
+                      products: const [
+                        _ProductData('Средство для мытья кистей', '#'),
+                        _ProductData('Полотенце для сушки', '#'),
+                      ],
                     ),
                   ],
                 ),
               ),
               const SizedBox(height: 10),
               AppExpandableBlock(
-                title: 'Видео Урок 4',
+                title: 'Видео Урок 4: Создание контуринга',
                 icon: Icons.play_circle_outline,
                 preview: _LessonPreview(index: 4),
                 content: Column(
                   children: [
                     _SubLessonCard(
-                      title: 'Подготовка ногтей',
-                      products: const [_ProductData('Масло OPI prospa', 'https://goldapple.ru')],
-                    ),
-                    const SizedBox(height: 12),
-                    _SubLessonCard(
-                      title: 'Нанесение покрытия',
+                      title: 'Техника контуринга',
                       products: const [
-                        _ProductData('Лак ESSIE', 'https://goldapple.ru'),
-                        _ProductData('Топ ESSIE speed setter', 'https://goldapple.ru'),
+                        _ProductData('Кремовые продукты для контуринга', '#'),
+                        _ProductData('Сухие продукты для контуринга', '#'),
                       ],
                     ),
                   ],
@@ -139,29 +170,59 @@ class BaseTab extends StatelessWidget {
               ),
               const SizedBox(height: 20),
               AppExpandableBlock(
-                title: 'Чек Лист 1',
+                title: 'Чек Лист: Базовый набор для макияжа',
                 icon: Icons.checklist_outlined,
                 preview: _ChecklistPreview(index: 1),
                 content: _ChecklistContent(
-                  items: const ['Праймер', 'Тональный крем', 'Консилер', 'Пудра', 'Румяна', 'Хайлайтер', 'Тушь', 'Карандаш для бровей'],
+                  items: const [
+                    'Праймер для лица',
+                    'Тональный крем или флюид',
+                    'Консилер',
+                    'Пудра для фиксации',
+                    'Румяна (кремовые или сухие)',
+                    'Хайлайтер',
+                    'Карандаш для бровей',
+                    'Гель для бровей',
+                    'Тушь для ресниц',
+                    'Карандаш для губ',
+                    'Помада или блеск'
+                  ],
                 ),
               ),
               const SizedBox(height: 10),
               AppExpandableBlock(
-                title: 'Чек Лист 2',
+                title: 'Чек Лист: Кисти для макияжа',
                 icon: Icons.checklist_outlined,
                 preview: _ChecklistPreview(index: 2),
                 content: _ChecklistContent(
-                  items: const ['Гель для умывания', 'Тоник', 'Сыворотка', 'Крем для лица', 'SPF защита', 'Маска (1-2 раза/нед)'],
+                  items: const [
+                    'Кисть для тона (плоская)',
+                    'Кисть для пудры (пушистая)',
+                    'Кисть для румян',
+                    'Кисть для хайлайтера',
+                    'Кисть для теней (плоская)',
+                    'Кисть для растушевки теней',
+                    'Тонкая кисть для подводки',
+                    'Спонж для макияжа',
+                    'Точилка для карандашей'
+                  ],
                 ),
               ),
               const SizedBox(height: 10),
               AppExpandableBlock(
-                title: 'Чек Лист 3',
+                title: 'Чек Лист: Уход за кожей',
                 icon: Icons.checklist_outlined,
                 preview: _ChecklistPreview(index: 3),
                 content: _ChecklistContent(
-                  items: const ['Фен с ионизацией', 'Утюжок/выпрямитель', 'Плойка', 'Расчёска-брашинг', 'Термозащита', 'Заколки и зажимы'],
+                  items: const [
+                    'Очищающий гель или пенка',
+                    'Тоник для лица',
+                    'Сыворотка с гиалуроновой кислотой',
+                    'Увлажняющий крем',
+                    'SPF защита (днём)',
+                    'Ночной крем',
+                    'Маска для лица (1-2 раза в неделю)'
+                  ],
                 ),
               ),
               const SizedBox(height: 100),
@@ -273,6 +334,7 @@ class _ProductLink extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 3),
       child: GestureDetector(
         onTap: () async {
+          if (product.url == '#') return;
           final uri = Uri.parse(product.url);
           if (await canLaunchUrl(uri)) {
             await launchUrl(uri, mode: LaunchMode.externalApplication);
@@ -281,8 +343,8 @@ class _ProductLink extends StatelessWidget {
         child: Text(
           product.name,
           style: AppTypography.bodySmall.copyWith(
-            color: AppColors.primary,
-            decoration: TextDecoration.underline,
+            color: product.url == '#' ? AppColors.textSecondary : AppColors.primary,
+            decoration: product.url == '#' ? null : TextDecoration.underline,
             decorationColor: AppColors.primary,
           ),
         ),
