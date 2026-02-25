@@ -12,6 +12,11 @@ dependencies:
   google_fonts: ^6.2.1
   cached_network_image: ^3.4.1
   url_launcher: ^6.2.0
+  video_player: ^2.11.0
+  http: ^1.6.0
+  shared_preferences: ^2.5.4
+  web_socket_channel: ^3.0.1
+  image_picker: ^1.1.2
 
 dev_dependencies:
   flutter_test:
@@ -23,3 +28,5 @@ flutter:
   
   assets:
     - assets/images/
+    - assets/images/telegram_photos/
+    - assets/telegram_thumbs/

@@ -1,0 +1,234 @@
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
+
+const apiBase = 'https://donskih-cdn.ru/api/v1';
+const _keyAdminKey = 'admin_content_key';
+
+class AdminApiService {
+  static final AdminApiService _instance = AdminApiService._();
+  factory AdminApiService() => _instance;
+  AdminApiService._();
+
+  SharedPreferences? _prefs;
+  String? lastError;
+
+  Future<SharedPreferences> get _sp async {
+    _prefs ??= await SharedPreferences.getInstance();
+    return _prefs!;
+  }
+
+  Future<String?> getAdminKey() async {
+    final sp = await _sp;
+    return sp.getString(_keyAdminKey);
+  }
+
+  Future<void> setAdminKey(String key) async {
+    final sp = await _sp;
+    await sp.setString(_keyAdminKey, key);
+  }
+
+  Future<void> clearAdminKey() async {
+    final sp = await _sp;
+    await sp.remove(_keyAdminKey);
+  }
+
+  Map<String, String> _headers(String? adminKey) {
+    final m = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
+    };
+    if (adminKey != null && adminKey.isNotEmpty) {
+      m['X-Admin-Key'] = adminKey;
+    }
+    return m;
+  }
+
+  String _errorFromResponse(http.Response resp) {
+    if (resp.statusCode == 413) {
+      return 'Файл слишком большой для текущего лимита сервера';
+    }
+    if (resp.statusCode == 504) {
+      return 'Сервер не успел обработать видео, попробуйте файл меньше или повторите';
+    }
+    try {
+      final body = jsonDecode(resp.body);
+      if (body is Map<String, dynamic>) {
+        final detail = body['detail'];
+        if (detail is String && detail.isNotEmpty) return detail;
+        final error = body['error'];
+        if (error is String && error.isNotEmpty) return error;
+      }
+    } catch (_) {}
+    return 'HTTP ${resp.statusCode}';
+  }
+
+  Future<List<Map<String, dynamic>>?> fetchContentList(String? adminKey) async {
+    lastError = null;
+    try {
+      final resp = await http.get(
+        Uri.parse('$apiBase/admin/content'),
+        headers: _headers(adminKey),
+      );
+      if (resp.statusCode != 200) {
+        lastError = _errorFromResponse(resp);
+        return null;
+      }
+      final list = jsonDecode(resp.body) as List<dynamic>;
+      return list.map((e) => e as Map<String, dynamic>).toList();
+    } catch (e) {
+      lastError = e.toString();
+      return null;
+    }
+  }
+
+  Future<Map<String, dynamic>?> createContent(
+    String? adminKey,
+    Map<String, dynamic> body,
+  ) async {
+    lastError = null;
+    try {
+      final resp = await http.post(
+        Uri.parse('$apiBase/admin/content'),
+        headers: _headers(adminKey),
+        body: jsonEncode(body),
+      );
+      if (resp.statusCode != 201) {
+        lastError = _errorFromResponse(resp);
+        return null;
+      }
+      return jsonDecode(resp.body) as Map<String, dynamic>;
+    } catch (e) {
+      lastError = e.toString();
+      return null;
+    }
+  }
+
+  Future<Map<String, dynamic>?> updateContent(
+    String? adminKey,
+    String id,
+    Map<String, dynamic> body,
+  ) async {
+    lastError = null;
+    try {
+      final resp = await http.put(
+        Uri.parse('$apiBase/admin/content/$id'),
+        headers: _headers(adminKey),
+        body: jsonEncode(body),
+      );
+      if (resp.statusCode != 200) {
+        lastError = _errorFromResponse(resp);
+        return null;
+      }
+      return jsonDecode(resp.body) as Map<String, dynamic>;
+    } catch (e) {
+      lastError = e.toString();
+      return null;
+    }
+  }
+
+  Future<bool> deleteContent(String? adminKey, String id) async {
+    lastError = null;
+    try {
+      final resp = await http.delete(
+        Uri.parse('$apiBase/admin/content/$id'),
+        headers: _headers(adminKey),
+      );
+      if (resp.statusCode != 204) {
+        lastError = _errorFromResponse(resp);
+      }
+      return resp.statusCode == 204;
+    } catch (e) {
+      lastError = e.toString();
+      return false;
+    }
+  }
+
+  Future<Map<String, dynamic>?> uploadVideoBytes(
+    String? adminKey, {
+    required String filename,
+    required List<int> bytes,
+  }) async {
+    lastError = null;
+    if (adminKey == null || adminKey.isEmpty) {
+      lastError = 'Нет ключа администратора';
+      return null;
+    }
+
+    try {
+      final req = http.MultipartRequest(
+        'POST',
+        Uri.parse('$apiBase/admin/content/upload-video'),
+      );
+      req.headers['X-Admin-Key'] = adminKey;
+      req.headers['Accept'] = 'application/json';
+
+      if (bytes.isEmpty) {
+        lastError = 'Файл не прочитан';
+        return null;
+      }
+      req.files.add(
+        http.MultipartFile.fromBytes(
+          'file',
+          bytes,
+          filename: filename,
+        ),
+      );
+
+      final streamed = await req.send();
+      final resp = await http.Response.fromStream(streamed);
+      if (resp.statusCode != 200) {
+        lastError = _errorFromResponse(resp);
+        return null;
+      }
+      return jsonDecode(resp.body) as Map<String, dynamic>;
+    } catch (e) {
+      lastError = e.toString();
+      return null;
+    }
+  }
+
+  Future<Map<String, dynamic>?> uploadChecklistBytes(
+    String? adminKey, {
+    required String filename,
+    required List<int> bytes,
+  }) async {
+    lastError = null;
+    if (adminKey == null || adminKey.isEmpty) {
+      lastError = 'Нет ключа администратора';
+      return null;
+    }
+
+    try {
+      final req = http.MultipartRequest(
+        'POST',
+        Uri.parse('$apiBase/admin/content/upload-checklist'),
+      );
+      req.headers['X-Admin-Key'] = adminKey;
+      req.headers['Accept'] = 'application/json';
+
+      if (bytes.isEmpty) {
+        lastError = 'Файл не прочитан';
+        return null;
+      }
+      req.files.add(
+        http.MultipartFile.fromBytes(
+          'file',
+          bytes,
+          filename: filename,
+        ),
+      );
+
+      final streamed = await req.send();
+      final resp = await http.Response.fromStream(streamed);
+      if (resp.statusCode != 200) {
+        lastError = _errorFromResponse(resp);
+        return null;
+      }
+      return jsonDecode(resp.body) as Map<String, dynamic>;
+    } catch (e) {
+      lastError = e.toString();
+      return null;
+    }
+  }
+}

@@ -6,11 +6,13 @@ import '../../core/theme/app_colors.dart';
 class AppBottomNav extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onTap;
+  final String? avatarUrl;
 
   const AppBottomNav({
     super.key,
     required this.currentIndex,
     required this.onTap,
+    this.avatarUrl,
   });
 
   @override
@@ -80,7 +82,7 @@ class AppBottomNav extends StatelessWidget {
                         _ProfileNavItem(
                           isActive: currentIndex == 3,
                           onTap: () => onTap(3),
-                          imageUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&q=80',
+                          imageUrl: avatarUrl,
                         ),
                       ],
                     ),
@@ -177,12 +179,12 @@ class _NavItem extends StatelessWidget {
 class _ProfileNavItem extends StatelessWidget {
   final bool isActive;
   final VoidCallback onTap;
-  final String imageUrl;
+  final String? imageUrl;
 
   const _ProfileNavItem({
     required this.isActive,
     required this.onTap,
-    required this.imageUrl,
+    this.imageUrl,
   });
 
   @override
@@ -206,15 +208,20 @@ class _ProfileNavItem extends StatelessWidget {
                 ),
               ),
               child: ClipOval(
-                child: CachedNetworkImage(
-                  imageUrl: imageUrl,
-                  fit: BoxFit.cover,
-                  placeholder: (_, __) => Container(color: AppColors.surfaceSecondary),
-                  errorWidget: (_, __, ___) => Container(
-                    color: AppColors.surfaceSecondary,
-                    child: const Icon(Icons.person, size: 14, color: AppColors.textTertiary),
-                  ),
-                ),
+                child: imageUrl != null && imageUrl!.isNotEmpty
+                    ? CachedNetworkImage(
+                        imageUrl: imageUrl!,
+                        fit: BoxFit.cover,
+                        placeholder: (_, __) => Container(color: AppColors.surfaceSecondary),
+                        errorWidget: (_, __, ___) => Container(
+                          color: AppColors.surfaceSecondary,
+                          child: const Icon(Icons.person, size: 14, color: AppColors.textTertiary),
+                        ),
+                      )
+                    : Container(
+                        color: AppColors.surfaceSecondary,
+                        child: const Icon(Icons.person, size: 14, color: AppColors.textTertiary),
+                      ),
               ),
             ),
           ),

@@ -1,9 +1,10 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'admin/admin_app.dart';
 import 'core/theme/app_theme.dart';
-import 'ui/screens/onboarding/onboarding_screen.dart';
 import 'ui/screens/auth/auth_screen.dart';
 import 'ui/screens/home/home_screen.dart';
 import 'ui/screens/content/content_detail_screen.dart';
@@ -13,15 +14,18 @@ import 'ui/screens/subscription/subscription_screen.dart';
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
 
-  SystemChrome.setSystemUIOverlayStyle(
-    const SystemUiOverlayStyle(
-      statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.dark,
-      statusBarBrightness: Brightness.light,
-    ),
-  );
+  if (!kIsWeb) {
+    SystemChrome.setSystemUIOverlayStyle(
+      const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.dark,
+        statusBarBrightness: Brightness.light,
+      ),
+    );
+  }
 
-  runApp(const DonskihApp());
+  final isAdmin = kIsWeb && Uri.base.path.startsWith('/admin');
+  runApp(isAdmin ? const AdminApp() : const DonskihApp());
 }
 
 class DonskihApp extends StatelessWidget {
@@ -37,8 +41,7 @@ class DonskihApp extends StatelessWidget {
       ),
       initialRoute: '/',
       routes: {
-        '/': (context) => const OnboardingScreen(),
-        '/auth': (context) => const AuthScreen(),
+        '/': (context) => const AuthScreen(),
         '/home': (context) => const HomeScreen(),
         '/content-detail': (context) => const ContentDetailScreen(),
         '/chat-room': (context) => const ChatRoomScreen(),
