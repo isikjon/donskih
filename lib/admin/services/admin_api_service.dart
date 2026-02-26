@@ -63,11 +63,16 @@ class AdminApiService {
     return 'HTTP ${resp.statusCode}';
   }
 
-  Future<List<Map<String, dynamic>>?> fetchContentList(String? adminKey) async {
+  Future<List<Map<String, dynamic>>?> fetchContentList(
+    String? adminKey, {
+    String? section,
+  }) async {
     lastError = null;
     try {
+      var url = '$apiBase/admin/content';
+      if (section != null) url += '?section=$section';
       final resp = await http.get(
-        Uri.parse('$apiBase/admin/content'),
+        Uri.parse(url),
         headers: _headers(adminKey),
       );
       if (resp.statusCode != 200) {
@@ -126,6 +131,137 @@ class AdminApiService {
       return null;
     }
   }
+
+  // ---------------------------------------------------------------------------
+  // Users management
+  // ---------------------------------------------------------------------------
+
+  Future<Map<String, dynamic>?> fetchUsers(
+    String? adminKey, {
+    int limit = 50,
+    int offset = 0,
+    String search = '',
+  }) async {
+    lastError = null;
+    try {
+      final uri = Uri.parse(
+        '$apiBase/admin/users?limit=$limit&offset=$offset&search=${Uri.encodeQueryComponent(search)}',
+      );
+      final resp = await http.get(uri, headers: _headers(adminKey));
+      if (resp.statusCode != 200) {
+        lastError = _errorFromResponse(resp);
+        return null;
+      }
+      return jsonDecode(resp.body) as Map<String, dynamic>;
+    } catch (e) {
+      lastError = e.toString();
+      return null;
+    }
+  }
+
+  Future<Map<String, dynamic>?> fetchUserDetail(
+    String? adminKey,
+    String userId,
+  ) async {
+    lastError = null;
+    try {
+      final resp = await http.get(
+        Uri.parse('$apiBase/admin/users/$userId'),
+        headers: _headers(adminKey),
+      );
+      if (resp.statusCode != 200) {
+        lastError = _errorFromResponse(resp);
+        return null;
+      }
+      return jsonDecode(resp.body) as Map<String, dynamic>;
+    } catch (e) {
+      lastError = e.toString();
+      return null;
+    }
+  }
+
+  Future<bool> blockUser(String? adminKey, String userId) async {
+    lastError = null;
+    try {
+      final resp = await http.post(
+        Uri.parse('$apiBase/admin/users/$userId/block'),
+        headers: _headers(adminKey),
+      );
+      if (resp.statusCode != 200) {
+        lastError = _errorFromResponse(resp);
+        return false;
+      }
+      return true;
+    } catch (e) {
+      lastError = e.toString();
+      return false;
+    }
+  }
+
+  Future<bool> unblockUser(String? adminKey, String userId) async {
+    lastError = null;
+    try {
+      final resp = await http.post(
+        Uri.parse('$apiBase/admin/users/$userId/unblock'),
+        headers: _headers(adminKey),
+      );
+      if (resp.statusCode != 200) {
+        lastError = _errorFromResponse(resp);
+        return false;
+      }
+      return true;
+    } catch (e) {
+      lastError = e.toString();
+      return false;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Chat moderation
+  // ---------------------------------------------------------------------------
+
+  Future<List<Map<String, dynamic>>?> fetchChatMessages(
+    String? adminKey, {
+    int limit = 50,
+    String? beforeId,
+    String? userId,
+  }) async {
+    lastError = null;
+    try {
+      var url = '$apiBase/admin/chat/messages?limit=$limit';
+      if (beforeId != null) url += '&before_id=$beforeId';
+      if (userId != null) url += '&user_id=$userId';
+      final resp = await http.get(Uri.parse(url), headers: _headers(adminKey));
+      if (resp.statusCode != 200) {
+        lastError = _errorFromResponse(resp);
+        return null;
+      }
+      return (jsonDecode(resp.body) as List).cast<Map<String, dynamic>>();
+    } catch (e) {
+      lastError = e.toString();
+      return null;
+    }
+  }
+
+  Future<bool> adminDeleteChatMessage(String? adminKey, String messageId) async {
+    lastError = null;
+    try {
+      final resp = await http.delete(
+        Uri.parse('$apiBase/admin/chat/messages/$messageId'),
+        headers: _headers(adminKey),
+      );
+      if (resp.statusCode != 204) {
+        lastError = _errorFromResponse(resp);
+        return false;
+      }
+      return true;
+    } catch (e) {
+      lastError = e.toString();
+      return false;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
 
   Future<bool> deleteContent(String? adminKey, String id) async {
     lastError = null;

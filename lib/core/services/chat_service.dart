@@ -208,8 +208,12 @@ class ChatService {
     await _post('/messages', {'text': text});
   }
 
-  Future<void> sendImageMessage(String imageUrl) async {
-    await _post('/messages', {'image_url': imageUrl});
+  Future<void> sendImageMessage(String imageUrl,
+      {String? caption, String? groupId}) async {
+    final body = <String, dynamic>{'image_url': imageUrl};
+    if (caption != null && caption.isNotEmpty) body['text'] = caption;
+    if (groupId != null) body['group_id'] = groupId;
+    await _post('/messages', body);
   }
 
   Future<void> editMessage(String id, String newText) async {

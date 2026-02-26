@@ -12,6 +12,7 @@ services:
     volumes:
       - ./app:/app/app
       - /var/www/hls:/var/www/hls
+      - ./static:/app/static
     restart: unless-stopped
 
   postgres:

@@ -25,9 +25,11 @@ class _AdminContentEditScreenState extends State<AdminContentEditScreen> {
 
   String? _id;
   late String _type;
+  String _section = 'main'; // 'main' | 'base'
   DateTime _displayDate = DateTime.now();
   int _sortOrder = 0;
-  List<({String title, String duration})> _subItems = [];
+  List<({String title, String description, String url, String duration})>
+      _subItems = [];
   String? _adminKey;
   bool _saving = false;
   bool _uploading = false;
@@ -46,6 +48,7 @@ class _AdminContentEditScreenState extends State<AdminContentEditScreen> {
     if (args != null) {
       _id = args['id'] as String?;
       _type = args['type'] as String? ?? 'video';
+      _section = args['section'] as String? ?? 'main';
       if (args['display_date'] != null) {
         final d = DateTime.tryParse(args['display_date'] as String);
         if (d != null) _displayDate = d;
@@ -64,7 +67,9 @@ class _AdminContentEditScreenState extends State<AdminContentEditScreen> {
           final m = e as Map<String, dynamic>;
           return (
             title: m['title'] as String? ?? '',
-            duration: m['duration'] as String? ?? ''
+            description: m['description'] as String? ?? '',
+            url: m['url'] as String? ?? '',
+            duration: m['duration'] as String? ?? '',
           );
         }).toList();
       }
@@ -92,7 +97,8 @@ class _AdminContentEditScreenState extends State<AdminContentEditScreen> {
   }
 
   void _addSubItem() {
-    setState(() => _subItems.add((title: '', duration: '')));
+    setState(() => _subItems
+        .add((title: '', description: '', url: '', duration: '')));
   }
 
   void _removeSubItem(int i) {
@@ -188,10 +194,6 @@ class _AdminContentEditScreenState extends State<AdminContentEditScreen> {
       setState(() => _error = 'У всех частей видео должен быть заполнен тайтл');
       return;
     }
-    if (_type == 'video' && _urlController.text.trim().isEmpty) {
-      setState(() => _error = 'Сначала загрузите видеофайл');
-      return;
-    }
     if (_type == 'checklist' && _urlController.text.trim().isEmpty) {
       setState(() => _error = 'Сначала загрузите PDF-файл');
       return;
@@ -207,6 +209,7 @@ class _AdminContentEditScreenState extends State<AdminContentEditScreen> {
       _saving = true;
     });
     final body = <String, dynamic>{
+      'section': _section,
       'display_date': _displayDate.toIso8601String().split('T').first,
       'title': _titleController.text.trim(),
       'subtitle': _subtitleController.text.trim().isEmpty
@@ -228,6 +231,12 @@ class _AdminContentEditScreenState extends State<AdminContentEditScreen> {
           .entries
           .map((entry) => {
                 'title': entry.value.title.trim(),
+                'description': entry.value.description.trim().isEmpty
+                    ? null
+                    : entry.value.description.trim(),
+                'url': entry.value.url.trim().isEmpty
+                    ? null
+                    : entry.value.url.trim(),
                 'duration': entry.value.duration.trim().isEmpty
                     ? null
                     : entry.value.duration.trim(),
@@ -305,6 +314,39 @@ class _AdminContentEditScreenState extends State<AdminContentEditScreen> {
                       AppTypography.bodySmall.copyWith(color: AppColors.error)),
               const SizedBox(height: 12),
             ],
+            // Section badge
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: _section == 'base'
+                    ? AppColors.primary.withValues(alpha: 0.08)
+                    : AppColors.surfaceSecondary,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: _section == 'base'
+                      ? AppColors.primary.withValues(alpha: 0.3)
+                      : AppColors.border,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    _section == 'base'
+                        ? Icons.school_rounded
+                        : Icons.library_books_rounded,
+                    color: AppColors.primary,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    _section == 'base' ? 'Раздел: База знаний' : 'Раздел: Главная',
+                    style: AppTypography.bodySmall
+                        .copyWith(color: AppColors.primary, fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
             ListTile(
               contentPadding: EdgeInsets.zero,
               title: const Text('Дата публикации'),
@@ -410,8 +452,7 @@ class _AdminContentEditScreenState extends State<AdminContentEditScreen> {
               const SizedBox(height: 16),
               Row(
                 children: [
-                  Text('Части видео (тайтл + длительность)',
-                      style: AppTypography.titleSmall),
+                  Text('Части видео', style: AppTypography.titleSmall),
                   const SizedBox(width: 8),
                   IconButton.filled(
                     onPressed: _addSubItem,
@@ -421,46 +462,106 @@ class _AdminContentEditScreenState extends State<AdminContentEditScreen> {
                   ),
                 ],
               ),
+              const SizedBox(height: 4),
+              Text(
+                'Название + своя ссылка на видео + описание (опционально)',
+                style: AppTypography.bodySmall
+                    .copyWith(color: AppColors.textTertiary),
+              ),
               const SizedBox(height: 8),
               ...List.generate(_subItems.length, (i) {
                 final idx = i;
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Row(
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceSecondary,
+                    borderRadius: BorderRadius.circular(AppSpacing.radiusMedium),
+                  ),
+                  child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        flex: 2,
-                        child: TextFormField(
-                          initialValue: _subItems[idx].title,
-                          decoration:
-                              const InputDecoration(hintText: 'Название части'),
-                          onChanged: (v) {
-                            setState(() {
-                              _subItems[idx] =
-                                  (title: v, duration: _subItems[idx].duration);
-                            });
-                          },
-                        ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextFormField(
+                              initialValue: _subItems[idx].title,
+                              decoration: const InputDecoration(
+                                  hintText: 'Название части'),
+                              onChanged: (v) {
+                                setState(() {
+                                  _subItems[idx] = (
+                                    title: v,
+                                    description: _subItems[idx].description,
+                                    url: _subItems[idx].url,
+                                    duration: _subItems[idx].duration,
+                                  );
+                                });
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          SizedBox(
+                            width: 72,
+                            child: TextFormField(
+                              initialValue: _subItems[idx].duration,
+                              decoration:
+                                  const InputDecoration(hintText: '0:00'),
+                              onChanged: (v) {
+                                setState(() {
+                                  _subItems[idx] = (
+                                    title: _subItems[idx].title,
+                                    description: _subItems[idx].description,
+                                    url: _subItems[idx].url,
+                                    duration: v,
+                                  );
+                                });
+                              },
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.remove_circle_outline,
+                                color: AppColors.error),
+                            onPressed: () => _removeSubItem(idx),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 8),
-                      SizedBox(
-                        width: 80,
-                        child: TextFormField(
-                          initialValue: _subItems[idx].duration,
-                          decoration: const InputDecoration(hintText: '0:00'),
-                          onChanged: (v) {
-                            setState(() {
-                              _subItems[idx] =
-                                  (title: _subItems[idx].title, duration: v);
-                            });
-                          },
+                      const SizedBox(height: 8),
+                      TextFormField(
+                        initialValue: _subItems[idx].url,
+                        decoration: const InputDecoration(
+                          hintText: 'Ссылка на видео (https://...)',
+                          prefixIcon: Icon(Icons.link),
                         ),
+                        keyboardType: TextInputType.url,
+                        onChanged: (v) {
+                          setState(() {
+                            _subItems[idx] = (
+                              title: _subItems[idx].title,
+                              description: _subItems[idx].description,
+                              url: v,
+                              duration: _subItems[idx].duration,
+                            );
+                          });
+                        },
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.remove_circle_outline,
-                            color: AppColors.error),
-                        onPressed: () => _removeSubItem(idx),
+                      const SizedBox(height: 8),
+                      TextFormField(
+                        initialValue: _subItems[idx].description,
+                        decoration: const InputDecoration(
+                          hintText: 'Описание (опционально)',
+                        ),
+                        maxLines: 2,
+                        onChanged: (v) {
+                          setState(() {
+                            _subItems[idx] = (
+                              title: _subItems[idx].title,
+                              description: v,
+                              url: _subItems[idx].url,
+                              duration: _subItems[idx].duration,
+                            );
+                          });
+                        },
                       ),
                     ],
                   ),

@@ -1,6 +1,9 @@
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/models/content_item.dart';
+import '../../../core/services/bookmark_service.dart';
 import '../../../core/services/content_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
@@ -19,6 +22,7 @@ class _ContentTabState extends State<ContentTab> {
   static const ScrollPhysics _refreshPhysics =
       AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics());
 
+  final _bookmarkService = BookmarkService();
   final _bookmarks = <String, bool>{};
   Map<String, List<ContentItemDto>>? _contentByDate;
   bool _loading = true;
@@ -31,10 +35,18 @@ class _ContentTabState extends State<ContentTab> {
   }
 
   Future<void> _loadContent() async {
-    final data = await ContentService().fetchContent();
+    final results = await Future.wait([
+      ContentService().fetchContent(),
+      _bookmarkService.getAll(),
+    ]);
     if (!mounted) return;
+    final data = results[0] as Map<String, List<ContentItemDto>>?;
+    final saved = results[1] as Set<String>;
     setState(() {
       _contentByDate = data;
+      for (final id in saved) {
+        _bookmarks[id] = true;
+      }
       _loading = false;
     });
   }
@@ -54,8 +66,12 @@ class _ContentTabState extends State<ContentTab> {
     });
   }
 
-  void _openVideo(ContentItemDto item, {String? subTitle}) {
-    final url = item.url?.trim();
+  void _openVideo(ContentItemDto item, {_SubLessonData? sub}) {
+    // Sub-video uses its own URL if set, otherwise falls back to parent URL
+    final url = (sub?.url?.trim().isNotEmpty == true
+            ? sub!.url
+            : item.url)
+        ?.trim();
     if (url == null || url.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Видео еще не загружено')),
@@ -66,7 +82,7 @@ class _ContentTabState extends State<ContentTab> {
       MaterialPageRoute(
         builder: (_) => VideoPlayerScreen(
           videoUrl: url,
-          title: subTitle ?? item.title,
+          title: sub?.title ?? item.title,
         ),
       ),
     );
@@ -117,6 +133,7 @@ class _ContentTabState extends State<ContentTab> {
 
   void _toggleBookmark(String id, bool value) {
     setState(() => _bookmarks[id] = value);
+    _bookmarkService.set(id, value: value);
   }
 
   @override
@@ -168,7 +185,7 @@ class _ContentTabState extends State<ContentTab> {
   }
 
   Widget _buildContentFromApi() {
-    final dates = _contentByDate!.keys.toList()..sort((a, b) => b.compareTo(a));
+    final dates = _contentByDate!.keys.toList()..sort((a, b) => a.compareTo(b));
     final list = <Widget>[];
     for (final dateIso in dates) {
       final items = _contentByDate![dateIso]!;
@@ -188,9 +205,14 @@ class _ContentTabState extends State<ContentTab> {
               onBookmark: (v) => _toggleBookmark(item.id, v),
               canPlay: (item.url ?? '').trim().isNotEmpty,
               onPlayMain: () => _openVideo(item),
-              onPlaySubLesson: (sub) => _openVideo(item, subTitle: sub.title),
+              onPlaySubLesson: (sub) => _openVideo(item, sub: sub),
               subLessons: item.subItems
-                  .map((s) => _SubLessonData(s.title, s.duration ?? '—'))
+                  .map((s) => _SubLessonData(
+                        s.title,
+                        s.duration ?? '',
+                        description: s.description,
+                        url: s.url,
+                      ))
                   .toList(),
             ),
           );
@@ -379,8 +401,98 @@ class _DateLabel extends StatelessWidget {
 
 class _SubLessonData {
   final String title;
+  final String? description;
+  final String? url; // own video URL; if null falls back to parent URL
   final String duration;
-  const _SubLessonData(this.title, this.duration);
+  const _SubLessonData(this.title, this.duration,
+      {this.description, this.url});
+}
+
+// ---------------------------------------------------------------------------
+// _LinkedText — renders plain text with http/https URLs as tappable links
+// ---------------------------------------------------------------------------
+
+class _LinkedText extends StatefulWidget {
+  final String text;
+  final TextStyle? style;
+  final int? maxLines;
+  final TextOverflow overflow;
+
+  const _LinkedText({
+    required this.text,
+    this.style,
+    this.maxLines,
+    this.overflow = TextOverflow.clip,
+  });
+
+  @override
+  State<_LinkedText> createState() => _LinkedTextState();
+}
+
+class _LinkedTextState extends State<_LinkedText> {
+  static final _urlRegex = RegExp(
+    r'https?://[^\s<>\[\]{}|\\^`"]+',
+    caseSensitive: false,
+  );
+
+  final _recognizers = <TapGestureRecognizer>[];
+
+  @override
+  void dispose() {
+    for (final r in _recognizers) {
+      r.dispose();
+    }
+    super.dispose();
+  }
+
+  Future<void> _launch(String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return;
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    for (final r in _recognizers) {
+      r.dispose();
+    }
+    _recognizers.clear();
+
+    final text = widget.text;
+    final baseStyle = widget.style ?? DefaultTextStyle.of(context).style;
+    final spans = <InlineSpan>[];
+    int cursor = 0;
+
+    for (final match in _urlRegex.allMatches(text)) {
+      if (match.start > cursor) {
+        spans.add(TextSpan(text: text.substring(cursor, match.start)));
+      }
+      final url = match.group(0)!;
+      final rec = TapGestureRecognizer()..onTap = () => _launch(url);
+      _recognizers.add(rec);
+      spans.add(TextSpan(
+        text: url,
+        style: const TextStyle(
+          color: AppColors.primary,
+          decoration: TextDecoration.underline,
+          decorationColor: AppColors.primary,
+        ),
+        recognizer: rec,
+      ));
+      cursor = match.end;
+    }
+    if (cursor < text.length) {
+      spans.add(TextSpan(text: text.substring(cursor)));
+    }
+
+    return RichText(
+      text: TextSpan(style: baseStyle, children: spans),
+      maxLines: widget.maxLines,
+      overflow: widget.overflow,
+    );
+  }
 }
 
 class _ExpandableLessonCard extends StatefulWidget {
@@ -485,10 +597,13 @@ class _ExpandableLessonCardState extends State<_ExpandableLessonCard>
                         fit: StackFit.expand,
                         children: [
                           if (thumbUrl != null)
-                            Image.network(
-                              thumbUrl,
+                            CachedNetworkImage(
+                              imageUrl: thumbUrl,
                               fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => const SizedBox(),
+                              errorWidget: (_, __, ___) => const SizedBox(),
+                              placeholder: (_, __) => Container(
+                                color: AppColors.surfaceSecondary,
+                              ),
                             ),
                           Container(
                             color: Colors.black.withValues(
@@ -521,11 +636,15 @@ class _ExpandableLessonCardState extends State<_ExpandableLessonCard>
                           style: AppTypography.titleSmall,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis),
-                      const SizedBox(height: 2),
-                      Text(widget.description,
+                      if (widget.description.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        _LinkedText(
+                          text: widget.description,
                           style: AppTypography.bodySmall,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -554,14 +673,18 @@ class _ExpandableLessonCardState extends State<_ExpandableLessonCard>
                   padding: const EdgeInsets.all(12),
                   child: Column(
                     children: widget.subLessons.map((sub) {
+                      // Sub-video is playable if it has its own URL OR parent has URL
+                      final canPlaySub =
+                          (sub.url?.trim().isNotEmpty ?? false) || widget.canPlay;
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 10),
                         child: InkWell(
-                          onTap: widget.canPlay
+                          onTap: canPlaySub
                               ? () => widget.onPlaySubLesson(sub)
                               : null,
                           borderRadius: BorderRadius.circular(8),
                           child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
                               Container(
                                 width: 56,
@@ -573,7 +696,7 @@ class _ExpandableLessonCardState extends State<_ExpandableLessonCard>
                                 child: Center(
                                   child: Icon(
                                     Icons.play_arrow_rounded,
-                                    color: widget.canPlay
+                                    color: canPlaySub
                                         ? AppColors.primary
                                         : AppColors.textTertiary
                                             .withValues(alpha: 0.45),
@@ -583,11 +706,29 @@ class _ExpandableLessonCardState extends State<_ExpandableLessonCard>
                               ),
                               const SizedBox(width: 12),
                               Expanded(
-                                child: Text(sub.title,
-                                    style: AppTypography.bodyMedium),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(sub.title,
+                                        style: AppTypography.bodyMedium),
+                                    if (sub.description != null &&
+                                        sub.description!.isNotEmpty) ...[
+                                      const SizedBox(height: 2),
+                                      _LinkedText(
+                                        text: sub.description!,
+                                        style: AppTypography.bodySmall.copyWith(
+                                            color: AppColors.textSecondary),
+                                        maxLines: 3,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ],
+                                  ],
+                                ),
                               ),
-                              Text(sub.duration,
-                                  style: AppTypography.labelSmall),
+                              if (sub.duration.isNotEmpty)
+                                Text(sub.duration,
+                                    style: AppTypography.labelSmall),
                             ],
                           ),
                         ),
@@ -663,10 +804,13 @@ class _ChecklistCard extends StatelessWidget {
                   fit: StackFit.expand,
                   children: [
                     if (thumbUrl != null)
-                      Image.network(
-                        thumbUrl,
+                      CachedNetworkImage(
+                        imageUrl: thumbUrl,
                         fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => const SizedBox(),
+                        errorWidget: (_, __, ___) => const SizedBox(),
+                        placeholder: (_, __) => Container(
+                          color: AppColors.surfaceSecondary,
+                        ),
                       ),
                     Container(
                       color: Colors.black.withValues(
@@ -763,7 +907,7 @@ class _ProgramBlockFromApiState extends State<_ProgramBlockFromApi>
   @override
   Widget build(BuildContext context) {
     final dates = widget.contentByDate.keys.toList()
-      ..sort((a, b) => b.compareTo(a));
+      ..sort((a, b) => a.compareTo(b));
     return Container(
       decoration: BoxDecoration(
         color: AppColors.surface,

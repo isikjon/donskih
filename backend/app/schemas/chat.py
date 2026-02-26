@@ -11,6 +11,7 @@ class ChatMessageOut(BaseModel):
     sender_photo_url: str | None
     text: str | None
     image_url: str | None
+    group_id: str | None
     is_edited: bool
     is_deleted: bool
     created_at: str
@@ -21,6 +22,7 @@ class ChatMessageOut(BaseModel):
 class SendMessageRequest(BaseModel):
     text: str | None = None
     image_url: str | None = None
+    group_id: str | None = None
 
 
 class EditMessageRequest(BaseModel):

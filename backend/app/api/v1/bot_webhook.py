@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.database import get_db
 from app.models.user import User, TelegramAccount
+from app.services.avatar_store import fetch_and_store_avatar
 
 logger = logging.getLogger(__name__)
 
@@ -73,11 +74,7 @@ async def _handle_contact(
     last_name = from_user.get("last_name")
     username = from_user.get("username")
 
-    photo_url = None
-    try:
-        photo_url = await _get_profile_photo_url(tg_user_id)
-    except Exception as e:
-        logger.warning(f"Could not get profile photo: {e}")
+    photo_url = await fetch_and_store_avatar(tg_user_id)
 
     result = await db.execute(
         select(TelegramAccount).where(TelegramAccount.user_id == user.id)
@@ -136,35 +133,6 @@ async def _send_contact_request(chat_id: int) -> None:
             },
         )
 
-
-async def _get_profile_photo_url(tg_user_id: int) -> str | None:
-    """Fetch user's Telegram profile photo via Bot API."""
-    import httpx
-
-    async with httpx.AsyncClient() as client:
-        resp = await client.get(
-            f"https://api.telegram.org/bot{settings.telegram_bot_token}"
-            f"/getUserProfilePhotos?user_id={tg_user_id}&limit=1"
-        )
-        data = resp.json()
-        if not data.get("ok") or not data["result"]["photos"]:
-            return None
-
-        file_id = data["result"]["photos"][0][-1]["file_id"]
-
-        resp = await client.get(
-            f"https://api.telegram.org/bot{settings.telegram_bot_token}"
-            f"/getFile?file_id={file_id}"
-        )
-        file_data = resp.json()
-        if not file_data.get("ok"):
-            return None
-
-        file_path = file_data["result"]["file_path"]
-        return (
-            f"https://api.telegram.org/file/bot{settings.telegram_bot_token}"
-            f"/{file_path}"
-        )
 
 
 async def _send_message(chat_id: int, text: str) -> None:

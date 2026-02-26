@@ -205,14 +205,18 @@ async def upload_checklist_file(
 
 @router.get("", response_model=list[ContentItemOut])
 async def admin_list_content(
+    section: str | None = None,
     db: AsyncSession = Depends(get_db),
     _: None = Depends(require_admin),
 ):
-    result = await db.execute(
+    stmt = (
         select(ContentItem)
         .options(selectinload(ContentItem.sub_items))
         .order_by(ContentItem.display_date.desc(), ContentItem.sort_order.asc())
     )
+    if section:
+        stmt = stmt.where(ContentItem.section == section)
+    result = await db.execute(stmt)
     items = result.scalars().all()
     return [content_item_to_out(i) for i in items]
 
@@ -225,6 +229,7 @@ async def admin_create_content(
 ):
     item = ContentItem(
         type=body.type,
+        section=body.section,
         display_date=body.display_date,
         title=body.title,
         subtitle=body.subtitle,
@@ -237,6 +242,8 @@ async def admin_create_content(
         sub_item = ContentSubItem(
             content_item_id=item.id,
             title=sub.title,
+            description=sub.description,
+            url=sub.url,
             duration=sub.duration,
             sort_order=sub.sort_order if sub.sort_order else i,
         )
@@ -279,6 +286,8 @@ async def admin_update_content(
     item = result.scalar_one_or_none()
     if not item:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Content not found")
+    if body.section is not None:
+        item.section = body.section
     if body.display_date is not None:
         item.display_date = body.display_date
     if body.title is not None:
@@ -296,6 +305,8 @@ async def admin_update_content(
             sub_item = ContentSubItem(
                 content_item_id=item.id,
                 title=sub_in.title,
+                description=sub_in.description,
+                url=sub_in.url,
                 duration=sub_in.duration,
                 sort_order=sub_in.sort_order if sub_in.sort_order else i,
             )

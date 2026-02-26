@@ -1,12 +1,16 @@
 class ContentSubItemDto {
   final String id;
   final String title;
+  final String? description;
+  final String? url;
   final String? duration;
   final int sortOrder;
 
   ContentSubItemDto({
     required this.id,
     required this.title,
+    this.description,
+    this.url,
     this.duration,
     this.sortOrder = 0,
   });
@@ -15,6 +19,8 @@ class ContentSubItemDto {
     return ContentSubItemDto(
       id: json['id'] as String,
       title: json['title'] as String,
+      description: json['description'] as String?,
+      url: json['url'] as String?,
       duration: json['duration'] as String?,
       sortOrder: (json['sort_order'] as num?)?.toInt() ?? 0,
     );
@@ -23,7 +29,8 @@ class ContentSubItemDto {
 
 class ContentItemDto {
   final String id;
-  final String type; // video | checklist
+  final String type;    // video | checklist
+  final String section; // main | base
   final String displayDate; // YYYY-MM-DD
   final String title;
   final String? subtitle;
@@ -34,6 +41,7 @@ class ContentItemDto {
   ContentItemDto({
     required this.id,
     required this.type,
+    this.section = 'main',
     required this.displayDate,
     required this.title,
     this.subtitle,
@@ -47,6 +55,7 @@ class ContentItemDto {
     return ContentItemDto(
       id: json['id'] as String,
       type: json['type'] as String,
+      section: json['section'] as String? ?? 'main',
       displayDate: json['display_date'] as String,
       title: json['title'] as String,
       subtitle: json['subtitle'] as String?,

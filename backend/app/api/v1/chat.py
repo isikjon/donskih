@@ -15,12 +15,12 @@ from fastapi import (
 )
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import joinedload, selectinload
 
 from app.config import settings
 from app.database import async_session, get_db
 from app.models.chat import ChatMessage
-from app.models.user import User
+from app.models.user import TelegramAccount, User
 from app.schemas.chat import (
     ChatMessageOut,
     EditMessageRequest,
@@ -94,6 +94,7 @@ def _serialize(msg: ChatMessage) -> dict:
         "sender_photo_url": tg.photo_url if tg else None,
         "text": msg.text if not msg.is_deleted else None,
         "image_url": msg.image_url if not msg.is_deleted else None,
+        "group_id": msg.group_id,
         "is_edited": msg.is_edited,
         "is_deleted": msg.is_deleted,
         "created_at": msg.created_at.isoformat(),
@@ -142,7 +143,9 @@ async def get_messages(
 ) -> list[dict]:
     query = (
         select(ChatMessage)
-        .options(selectinload(ChatMessage.user))
+        .options(
+            selectinload(ChatMessage.user).joinedload(User.telegram_account)
+        )
         .order_by(desc(ChatMessage.created_at))
         .limit(min(limit, 100))
     )
@@ -180,6 +183,7 @@ async def send_message(
         user_id=current_user.id,
         text=req.text.strip() if req.text else None,
         image_url=req.image_url,
+        group_id=req.group_id,
     )
     db.add(msg)
     await db.flush()
@@ -188,7 +192,9 @@ async def send_message(
     await db.refresh(msg)
     result = await db.execute(
         select(ChatMessage)
-        .options(selectinload(ChatMessage.user))
+        .options(
+            selectinload(ChatMessage.user).joinedload(User.telegram_account)
+        )
         .where(ChatMessage.id == msg.id)
     )
     msg = result.scalar_one()
@@ -216,7 +222,9 @@ async def edit_message(
 
     result = await db.execute(
         select(ChatMessage)
-        .options(selectinload(ChatMessage.user))
+        .options(
+            selectinload(ChatMessage.user).joinedload(User.telegram_account)
+        )
         .where(ChatMessage.id == msg_uuid)
     )
     msg = result.scalar_one_or_none()

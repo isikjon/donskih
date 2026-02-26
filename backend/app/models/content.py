@@ -15,6 +15,7 @@ class ContentItem(Base):
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     type: Mapped[str] = mapped_column(String(20), nullable=False)  # video | checklist
+    section: Mapped[str] = mapped_column(String(10), nullable=False, default="main", server_default="main")  # main | base
     display_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     subtitle: Mapped[str | None] = mapped_column(String(1000))
@@ -45,7 +46,9 @@ class ContentSubItem(Base):
         UUID(as_uuid=True), ForeignKey("content_items.id", ondelete="CASCADE")
     )
     title: Mapped[str] = mapped_column(String(500), nullable=False)
-    duration: Mapped[str | None] = mapped_column(String(20))  # e.g. "3:42" for video
+    description: Mapped[str | None] = mapped_column(String(2000))
+    url: Mapped[str | None] = mapped_column(String(2048))  # own video URL
+    duration: Mapped[str | None] = mapped_column(String(20))  # e.g. "3:42"
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("NOW()")

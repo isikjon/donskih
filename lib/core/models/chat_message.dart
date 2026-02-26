@@ -5,6 +5,7 @@ class ChatMessage {
   final String? senderPhotoUrl;
   final String? text;
   final String? imageUrl;
+  final String? groupId;
   final bool isDeleted;
   final bool isEdited;
   final DateTime createdAt;
@@ -16,6 +17,7 @@ class ChatMessage {
     this.senderPhotoUrl,
     this.text,
     this.imageUrl,
+    this.groupId,
     required this.isDeleted,
     required this.isEdited,
     required this.createdAt,
@@ -29,6 +31,7 @@ class ChatMessage {
       senderPhotoUrl: json['sender_photo_url'] as String?,
       text: json['text'] as String?,
       imageUrl: json['image_url'] as String?,
+      groupId: json['group_id'] as String?,
       isDeleted: json['is_deleted'] as bool? ?? false,
       isEdited: json['is_edited'] as bool? ?? false,
       createdAt: DateTime.parse(json['created_at'] as String).toLocal(),
@@ -42,6 +45,7 @@ class ChatMessage {
     String? senderPhotoUrl,
     String? text,
     String? imageUrl,
+    String? groupId,
     bool? isDeleted,
     bool? isEdited,
     DateTime? createdAt,
@@ -55,6 +59,7 @@ class ChatMessage {
       senderPhotoUrl: senderPhotoUrl ?? this.senderPhotoUrl,
       text: clearText ? null : (text ?? this.text),
       imageUrl: clearImageUrl ? null : (imageUrl ?? this.imageUrl),
+      groupId: groupId ?? this.groupId,
       isDeleted: isDeleted ?? this.isDeleted,
       isEdited: isEdited ?? this.isEdited,
       createdAt: createdAt ?? this.createdAt,

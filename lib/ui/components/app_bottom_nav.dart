@@ -7,12 +7,16 @@ class AppBottomNav extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onTap;
   final String? avatarUrl;
+  final bool showHomeDot;
+  final bool showChatDot;
 
   const AppBottomNav({
     super.key,
     required this.currentIndex,
     required this.onTap,
     this.avatarUrl,
+    this.showHomeDot = false,
+    this.showChatDot = false,
   });
 
   @override
@@ -64,7 +68,7 @@ class AppBottomNav extends StatelessWidget {
                           activeIcon: Icons.home_rounded,
                           isActive: currentIndex == 0,
                           onTap: () => onTap(0),
-                          showDot: true,
+                          showDot: showHomeDot,
                         ),
                     _NavItem(
                           icon: Icons.auto_stories_outlined,
@@ -77,7 +81,7 @@ class AppBottomNav extends StatelessWidget {
                           activeIcon: Icons.chat_bubble_rounded,
                           isActive: currentIndex == 2,
                           onTap: () => onTap(2),
-                          showDot: true,
+                          showDot: showChatDot,
                         ),
                         _ProfileNavItem(
                           isActive: currentIndex == 3,

@@ -12,6 +12,7 @@ from app.security.jwt import (
     create_refresh_token_value,
     hash_token,
 )
+from app.services.avatar_store import download_and_store_avatar, fetch_and_store_avatar
 
 
 class AuthService:
@@ -42,11 +43,14 @@ class AuthService:
         if existing and existing.user_id != user.id:
             raise ValueError("Telegram account already linked to another user")
 
+        # Resolve photo_url to a permanent local copy
+        stored_photo = await _resolve_photo(tg_data.id, tg_data.photo_url)
+
         if existing and existing.user_id == user.id:
             existing.first_name = tg_data.first_name
             existing.last_name = tg_data.last_name
             existing.username = tg_data.username
-            existing.photo_url = tg_data.photo_url
+            existing.photo_url = stored_photo or tg_data.photo_url
             existing.auth_date = tg_data.auth_date
             return existing
 
@@ -56,7 +60,7 @@ class AuthService:
             first_name=tg_data.first_name,
             last_name=tg_data.last_name,
             username=tg_data.username,
-            photo_url=tg_data.photo_url,
+            photo_url=stored_photo or tg_data.photo_url,
             auth_date=tg_data.auth_date,
         )
         db.add(tg_account)
@@ -123,6 +127,16 @@ class AuthService:
         tokens = result.scalars().all()
         for t in tokens:
             t.is_revoked = True
+
+
+async def _resolve_photo(tg_user_id: int, widget_photo_url: str | None) -> str | None:
+    """Try Bot API first (better quality), fall back to widget URL download."""
+    result = await fetch_and_store_avatar(tg_user_id)
+    if result:
+        return result
+    if widget_photo_url:
+        return await download_and_store_avatar(tg_user_id, widget_photo_url)
+    return None
 
 
 auth_service = AuthService()

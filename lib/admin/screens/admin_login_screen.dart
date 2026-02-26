@@ -5,7 +5,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
 import '../services/admin_api_service.dart';
-import 'admin_content_list_screen.dart';
+import 'admin_main_screen.dart';
 
 class AdminLoginScreen extends StatefulWidget {
   const AdminLoginScreen({super.key});
@@ -36,7 +36,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
     if (!mounted) return;
     setState(() => _loading = false);
     if (list != null) {
-      Navigator.of(context).pushReplacementNamed(AdminContentListScreen.routeName);
+      Navigator.of(context).pushReplacementNamed(AdminMainScreen.routeName);
     }
   }
 
@@ -59,7 +59,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
     }
     await _api.setAdminKey(key);
     if (!mounted) return;
-    Navigator.of(context).pushReplacementNamed(AdminContentListScreen.routeName);
+    Navigator.of(context).pushReplacementNamed(AdminMainScreen.routeName);
   }
 
   @override

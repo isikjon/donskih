@@ -9,6 +9,7 @@ class AuthService {
   static const _keyRefreshToken = 'refresh_token';
   static const _keyUserJson = 'user_json';
   static const _keySubJson = 'subscription_json';
+  static const _keyIsBlocked = 'is_blocked';
 
   static final AuthService _instance = AuthService._();
   factory AuthService() => _instance;
@@ -25,6 +26,16 @@ class AuthService {
   Future<bool> get isLoggedIn async {
     final sp = await _sp;
     return sp.getString(_keyAccessToken) != null;
+  }
+
+  Future<bool> get isBlocked async {
+    final sp = await _sp;
+    return sp.getBool(_keyIsBlocked) ?? false;
+  }
+
+  Future<void> _setBlocked(bool value) async {
+    final sp = await _sp;
+    await sp.setBool(_keyIsBlocked, value);
   }
 
   Future<String?> get accessToken async {
@@ -70,9 +81,15 @@ class AuthService {
       );
 
       if (resp.statusCode == 200) {
+        await _setBlocked(false);
         final user = jsonDecode(resp.body) as Map<String, dynamic>;
         await saveUser(user);
         return user;
+      }
+
+      if (resp.statusCode == 403) {
+        await _setBlocked(true);
+        return null;
       }
 
       if (resp.statusCode == 401) {
@@ -170,6 +187,7 @@ class AuthService {
     await sp.remove(_keyRefreshToken);
     await sp.remove(_keyUserJson);
     await sp.remove(_keySubJson);
+    await sp.remove(_keyIsBlocked);
     _cachedUser = null;
     _cachedSub = null;
   }

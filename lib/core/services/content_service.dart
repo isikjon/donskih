@@ -10,11 +10,14 @@ class ContentService {
   factory ContentService() => _instance;
   ContentService._();
 
-  /// GET /api/v1/content → Map<dateISO, List<ContentItemDto>>
-  Future<Map<String, List<ContentItemDto>>?> fetchContent() async {
+  /// GET /api/v1/content?section=main → main screen content
+  /// GET /api/v1/content?section=base → library (База) content
+  Future<Map<String, List<ContentItemDto>>?> fetchContent({
+    String section = 'main',
+  }) async {
     try {
       final resp = await http.get(
-        Uri.parse('$apiBase/content'),
+        Uri.parse('$apiBase/content?section=$section'),
         headers: {'Accept': 'application/json'},
       );
       if (resp.statusCode != 200) return null;

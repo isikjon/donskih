@@ -14,15 +14,19 @@ router = APIRouter(prefix="/content", tags=["content"])
 
 
 @router.get("", response_model=dict[str, list[ContentItemOut]])
-async def list_content(db: AsyncSession = Depends(get_db)):
+async def list_content(
+    section: str = "main",
+    db: AsyncSession = Depends(get_db),
+):
     """
-    List all content items grouped by display_date (for main screen).
-    Dates are ISO format (YYYY-MM-DD) as keys; items sorted by sort_order.
+    List content items grouped by display_date.
+    section=main (default) — main screen; section=base — library.
     """
     result = await db.execute(
         select(ContentItem)
+        .where(ContentItem.section == section)
         .options(selectinload(ContentItem.sub_items))
-        .order_by(ContentItem.display_date.desc(), ContentItem.sort_order.asc())
+        .order_by(ContentItem.display_date.asc(), ContentItem.sort_order.asc())
     )
     items = result.scalars().all()
     by_date: dict[str, list[ContentItemOut]] = defaultdict(list)

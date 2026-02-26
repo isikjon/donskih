@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
-from app.api.v1 import auth, users, bot_webhook, subscription, content, admin_content, chat
+from app.api.v1 import auth, users, bot_webhook, subscription, content, admin_content, chat, admin_users
 
 logging.basicConfig(
     level=logging.DEBUG if settings.debug else logging.INFO,
@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     os.makedirs("/app/static/chat", exist_ok=True)
+    os.makedirs("/app/static/avatars", exist_ok=True)
     logger.info(f"Starting {settings.app_name} ({settings.app_env})")
     yield
     logger.info("Shutting down")
@@ -47,8 +48,10 @@ app.include_router(subscription.router, prefix="/api/v1")
 app.include_router(content.router, prefix="/api/v1")
 app.include_router(admin_content.router, prefix="/api/v1")
 app.include_router(chat.router, prefix="/api/v1")
+app.include_router(admin_users.router, prefix="/api/v1")
 
 os.makedirs("/app/static/chat", exist_ok=True)
+os.makedirs("/app/static/avatars", exist_ok=True)
 app.mount("/static", StaticFiles(directory="/app/static"), name="static")
 
 
