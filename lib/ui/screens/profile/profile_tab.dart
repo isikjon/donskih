@@ -80,135 +80,144 @@ class _ProfileTabState extends State<ProfileTab> {
 
   @override
   Widget build(BuildContext context) {
-    return RefreshIndicator(
-      color: AppColors.primary,
-      onRefresh: () => _loadAll(silent: false),
-      child: _buildList(),
-    );
-  }
+    final navBarHeight = MediaQuery.of(context).padding.bottom + 64;
+    final bottomGap = navBarHeight - 28;
 
-  Widget _buildList() {
-    return ListView(
-      physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.symmetric(horizontal: 20),
+    return Column(
       children: [
-        const SizedBox(height: 8),
-        Center(
-          child: _isLoading
-              ? const Padding(
-                  padding: EdgeInsets.all(40),
-                  child: CircularProgressIndicator(color: AppColors.primary),
-                )
-              : Column(
-                  children: [
-                    AppAvatar(
-                      name: _displayName(),
-                      size: AvatarSize.xlarge,
-                      imageUrl: _photoUrl(),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(_displayName(), style: AppTypography.headlineSmall),
-                    const SizedBox(height: 4),
-                    Text(
-                      _displaySubtitle(),
-                      style: AppTypography.bodySmall
-                          .copyWith(color: AppColors.textSecondary),
-                    ),
+        Expanded(
+          child: RefreshIndicator(
+            color: AppColors.primary,
+            onRefresh: () => _loadAll(silent: false),
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              children: [
+                const SizedBox(height: 8),
+                Center(
+                  child: _isLoading
+                      ? const Padding(
+                          padding: EdgeInsets.all(40),
+                          child: CircularProgressIndicator(
+                              color: AppColors.primary),
+                        )
+                      : Column(
+                          children: [
+                            AppAvatar(
+                              name: _displayName(),
+                              size: AvatarSize.xlarge,
+                              imageUrl: _photoUrl(),
+                            ),
+                            const SizedBox(height: 16),
+                            Text(_displayName(),
+                                style: AppTypography.headlineSmall),
+                            const SizedBox(height: 4),
+                            Text(
+                              _displaySubtitle(),
+                              style: AppTypography.bodySmall
+                                  .copyWith(color: AppColors.textSecondary),
+                            ),
+                          ],
+                        ),
+                ),
+                if (!_isLoading &&
+                    _user?['telegram_account'] == null) ...[
+                  const SizedBox(height: 16),
+                  _buildLinkTelegramCard(),
+                ],
+                const SizedBox(height: 24),
+                Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(16),
+                    border:
+                        Border.all(color: AppColors.border, width: 0.5),
+                    boxShadow: const [
+                      BoxShadow(
+                          color: AppColors.shadow,
+                          blurRadius: 10,
+                          offset: Offset(0, 2)),
+                    ],
+                  ),
+                  child: Column(
+                    children: [
+                      ListCard(
+                        title: 'Сохранённое',
+                        subtitle: 'Закладки',
+                        icon: Icons.bookmark_outline,
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                              builder: (_) => const SavedScreen()),
+                        ),
+                      ),
+                      const Divider(height: 1, indent: 56),
+                      ListCard(
+                        title: 'Уведомления',
+                        icon: Icons.notifications_outlined,
+                        onTap: () {},
+                      ),
+                      const Divider(height: 1, indent: 56),
+                      ListCard(
+                        title: 'Поддержка',
+                        icon: Icons.support_agent_outlined,
+                        onTap: _openSupport,
+                      ),
+                      const Divider(height: 1, indent: 56),
+                      ListCard(
+                        title: 'Очистить кэш',
+                        icon: Icons.cleaning_services_outlined,
+                        onTap: () => _showClearCache(context),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+              ],
+            ),
+          ),
+        ),
+
+        // Pinned bottom — adaptive gap above bottom bar
+        Padding(
+          padding: EdgeInsets.fromLTRB(20, 0, 20, bottomGap),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              GestureDetector(
+                onTap: () => _showDeleteAccount(context),
+                child: Text(
+                  'Удалить аккаунт',
+                  style: AppTypography.bodySmall.copyWith(
+                    color: AppColors.error,
+                    decoration: TextDecoration.underline,
+                    decorationColor: AppColors.error,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(16),
+                  border:
+                      Border.all(color: AppColors.border, width: 0.5),
+                  boxShadow: const [
+                    BoxShadow(
+                        color: AppColors.shadow,
+                        blurRadius: 10,
+                        offset: Offset(0, 2)),
                   ],
                 ),
-        ),
-
-        // Telegram link card (only if no Telegram linked)
-        if (!_isLoading && _user?['telegram_account'] == null) ...[
-          const SizedBox(height: 16),
-          _buildLinkTelegramCard(),
-        ],
-
-        const SizedBox(height: 24),
-
-        // Main menu
-        Container(
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppColors.border, width: 0.5),
-            boxShadow: const [
-              BoxShadow(
-                  color: AppColors.shadow,
-                  blurRadius: 10,
-                  offset: Offset(0, 2)),
-            ],
-          ),
-          child: Column(
-            children: [
-              ListCard(
-                title: 'Сохранённое',
-                subtitle: 'Закладки',
-                icon: Icons.bookmark_outline,
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                      builder: (_) => const SavedScreen()),
+                child: ListCard(
+                  title: 'Выйти из аккаунта',
+                  icon: Icons.logout_outlined,
+                  showArrow: false,
+                  onTap: () => _showLogout(context),
                 ),
               ),
-              const Divider(height: 1, indent: 56),
-              ListCard(
-                title: 'Уведомления',
-                icon: Icons.notifications_outlined,
-                onTap: () {},
-              ),
-              const Divider(height: 1, indent: 56),
-              ListCard(
-                title: 'Поддержка',
-                icon: Icons.support_agent_outlined,
-                onTap: _openSupport,
-              ),
-              const Divider(height: 1, indent: 56),
-              ListCard(
-                title: 'Очистить кэш',
-                icon: Icons.cleaning_services_outlined,
-                onTap: () => _showClearCache(context),
-              ),
             ],
           ),
         ),
-
-        const SizedBox(height: 12),
-
-        // Danger zone: delete account + logout
-        Container(
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppColors.border, width: 0.5),
-            boxShadow: const [
-              BoxShadow(
-                  color: AppColors.shadow,
-                  blurRadius: 10,
-                  offset: Offset(0, 2)),
-            ],
-          ),
-          child: Column(
-            children: [
-              ListCard(
-                title: 'Удалить аккаунт',
-                icon: Icons.delete_outline_rounded,
-                iconColor: AppColors.error,
-                showArrow: false,
-                onTap: () => _showDeleteAccount(context),
-              ),
-              const Divider(height: 1, indent: 56),
-              ListCard(
-                title: 'Выйти',
-                icon: Icons.logout_outlined,
-                iconColor: AppColors.error,
-                showArrow: false,
-                onTap: () => _showLogout(context),
-              ),
-            ],
-          ),
-        ),
-
-        const SizedBox(height: 100),
       ],
     );
   }
@@ -307,34 +316,16 @@ class _ProfileTabState extends State<ProfileTab> {
   void _showDeleteAccount(BuildContext context) {
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Удалить аккаунт?'),
-        content: const Text(
-            'Все ваши данные будут удалены безвозвратно. Это действие нельзя отменить.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Отмена'),
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              // TODO: call delete account API endpoint
-              await AuthService().logout();
-              if (context.mounted) {
-                Navigator.of(context)
-                    .pushNamedAndRemoveUntil('/', (_) => false);
-              }
-            },
-            child: Text('Удалить',
-                style: TextStyle(color: AppColors.error)),
-          ),
-        ],
-      ),
+      builder: (_) => const _DeleteAccountDialog(),
     );
+  }
+
+  Future<void> _deleteAccount() async {
+    // TODO: call real delete-account API endpoint
+    await AuthService().logout();
+    if (mounted) {
+      Navigator.of(context).pushNamedAndRemoveUntil('/', (_) => false);
+    }
   }
 
   void _showLogout(BuildContext context) {
@@ -362,6 +353,179 @@ class _ProfileTabState extends State<ProfileTab> {
             },
             child: Text('Выйти',
                 style: TextStyle(color: AppColors.error)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+
+class _DeleteAccountDialog extends StatefulWidget {
+  const _DeleteAccountDialog();
+
+  @override
+  State<_DeleteAccountDialog> createState() => _DeleteAccountDialogState();
+}
+
+class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
+  final _controller = TextEditingController();
+  bool _confirmed = false;
+  bool _deleting = false;
+
+  static const _confirmText = 'да я подтверждаю';
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.addListener(() {
+      final match =
+          _controller.text.trim().toLowerCase() == _confirmText;
+      if (match != _confirmed) setState(() => _confirmed = match);
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _delete() async {
+    setState(() => _deleting = true);
+    // TODO: call real delete-account API endpoint
+    await AuthService().logout();
+    if (mounted) {
+      Navigator.of(context).pop();
+      Navigator.of(context).pushNamedAndRemoveUntil('/', (_) => false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: AppColors.surface,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: Row(
+        children: [
+          Icon(Icons.warning_amber_rounded,
+              color: AppColors.error, size: 24),
+          const SizedBox(width: 8),
+          const Expanded(child: Text('Удаление аккаунта')),
+        ],
+      ),
+      content: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Вы собираетесь удалить свой аккаунт. '
+              'Это действие необратимо.',
+              style: AppTypography.bodyMedium,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'При удалении аккаунта:',
+              style: AppTypography.bodySmall
+                  .copyWith(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 6),
+            _bulletPoint('Все ваши личные данные будут удалены'),
+            _bulletPoint('История сообщений в чате будет удалена'),
+            _bulletPoint('Сохранённые закладки будут потеряны'),
+            _bulletPoint('Подписка будет аннулирована без возврата'),
+            _bulletPoint('Восстановить аккаунт будет невозможно'),
+            const SizedBox(height: 16),
+            Text(
+              'Для подтверждения введите:',
+              style: AppTypography.bodySmall
+                  .copyWith(color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: 4),
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceSecondary,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                _confirmText,
+                style: AppTypography.bodySmall.copyWith(
+                  fontWeight: FontWeight.w700,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _controller,
+              enabled: !_deleting,
+              autocorrect: false,
+              decoration: InputDecoration(
+                hintText: 'Введите текст подтверждения',
+                hintStyle: AppTypography.bodySmall
+                    .copyWith(color: AppColors.textTertiary),
+                contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12, vertical: 10),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(color: AppColors.border),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(color: AppColors.border),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide:
+                      BorderSide(color: AppColors.error, width: 1.5),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _deleting ? null : () => Navigator.pop(context),
+          child: Text('Отмена',
+              style: TextStyle(color: AppColors.textSecondary)),
+        ),
+        FilledButton(
+          onPressed: (_confirmed && !_deleting) ? _delete : null,
+          style: FilledButton.styleFrom(
+            backgroundColor: AppColors.error,
+            disabledBackgroundColor: AppColors.error.withValues(alpha: 0.3),
+          ),
+          child: _deleting
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: Colors.white),
+                )
+              : const Text('Удалить аккаунт'),
+        ),
+      ],
+    );
+  }
+
+  Widget _bulletPoint(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('  •  ',
+              style: AppTypography.bodySmall
+                  .copyWith(color: AppColors.error)),
+          Expanded(
+            child: Text(text,
+                style: AppTypography.bodySmall
+                    .copyWith(color: AppColors.textSecondary)),
           ),
         ],
       ),

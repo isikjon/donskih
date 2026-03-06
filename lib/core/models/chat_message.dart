@@ -1,3 +1,5 @@
+enum MessageStatus { sending, sent, delivered }
+
 class ChatMessage {
   final String id;
   final String userId;
@@ -9,6 +11,8 @@ class ChatMessage {
   final bool isDeleted;
   final bool isEdited;
   final DateTime createdAt;
+  final MessageStatus status;
+  final double? uploadProgress; // 0.0 – 1.0 for image uploads
 
   const ChatMessage({
     required this.id,
@@ -21,6 +25,8 @@ class ChatMessage {
     required this.isDeleted,
     required this.isEdited,
     required this.createdAt,
+    this.status = MessageStatus.delivered,
+    this.uploadProgress,
   });
 
   factory ChatMessage.fromJson(Map<String, dynamic> json) {
@@ -49,8 +55,11 @@ class ChatMessage {
     bool? isDeleted,
     bool? isEdited,
     DateTime? createdAt,
+    MessageStatus? status,
+    double? uploadProgress,
     bool clearText = false,
     bool clearImageUrl = false,
+    bool clearUploadProgress = false,
   }) {
     return ChatMessage(
       id: id ?? this.id,
@@ -63,6 +72,8 @@ class ChatMessage {
       isDeleted: isDeleted ?? this.isDeleted,
       isEdited: isEdited ?? this.isEdited,
       createdAt: createdAt ?? this.createdAt,
+      status: status ?? this.status,
+      uploadProgress: clearUploadProgress ? null : (uploadProgress ?? this.uploadProgress),
     );
   }
 

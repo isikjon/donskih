@@ -32,6 +32,7 @@ class ChatService {
   Stream<List<ChatMessage>> get stream => _controller.stream;
   List<ChatMessage> get messages => List.unmodifiable(_messages);
   bool get isConnected => _connected;
+  String? get currentUserId => _currentUserId;
 
   // ---------------------------------------------------------------------------
   // Connection lifecycle
@@ -126,7 +127,10 @@ class ChatService {
       switch (type) {
         case 'new_message':
           final msg = ChatMessage.fromJson(json['message'] as Map<String, dynamic>);
-          _messages.add(msg);
+          final isMe = msg.userId == _currentUserId;
+          _messages.add(msg.copyWith(
+            status: isMe ? MessageStatus.sent : MessageStatus.delivered,
+          ));
           _push();
 
         case 'edit_message':
@@ -255,7 +259,9 @@ class ChatService {
   // Image upload
   // ---------------------------------------------------------------------------
 
-  Future<String?> uploadImage(XFile file) async {
+  /// Upload image with progress tracking.
+  /// [onProgress] called with 0.0–1.0 during upload.
+  Future<String?> uploadImage(XFile file, {void Function(double)? onProgress}) async {
     final token = await _auth.accessToken;
     if (token == null) return null;
 
@@ -269,7 +275,32 @@ class ChatService {
           await http.MultipartFile.fromPath('file', file.path),
         );
 
-      final streamed = await request.send();
+      final totalLength = request.contentLength;
+      final origStream = request.finalize();
+
+      int sent = 0;
+      final progressStream = origStream.transform(
+        StreamTransformer<List<int>, List<int>>.fromHandlers(
+          handleData: (data, sink) {
+            sent += data.length;
+            onProgress?.call((sent / totalLength).clamp(0.0, 1.0));
+            sink.add(data);
+          },
+        ),
+      );
+
+      final streamedReq = http.StreamedRequest('POST', request.url);
+      request.headers.forEach((k, v) => streamedReq.headers[k] = v);
+      streamedReq.contentLength = totalLength;
+
+      progressStream.listen(
+        streamedReq.sink.add,
+        onDone: streamedReq.sink.close,
+        onError: streamedReq.sink.addError,
+        cancelOnError: true,
+      );
+
+      final streamed = await http.Client().send(streamedReq);
       final resp = await http.Response.fromStream(streamed);
 
       if (resp.statusCode == 200) {
@@ -287,6 +318,27 @@ class ChatService {
   // ---------------------------------------------------------------------------
 
   bool isMyMessage(ChatMessage msg) => msg.userId == _currentUserId;
+
+  /// Add an optimistic placeholder message to the list
+  void addOptimistic(ChatMessage msg) {
+    _messages.add(msg);
+    _push();
+  }
+
+  /// Remove an optimistic placeholder by temp ID
+  void removeOptimistic(String tempId) {
+    _messages.removeWhere((m) => m.id == tempId);
+    _push();
+  }
+
+  /// Update upload progress for an optimistic message
+  void updateOptimisticProgress(String tempId, double progress) {
+    final idx = _messages.indexWhere((m) => m.id == tempId);
+    if (idx != -1) {
+      _messages[idx] = _messages[idx].copyWith(uploadProgress: progress);
+      _push();
+    }
+  }
 
   Future<void> _post(String path, Map<String, dynamic> body) async {
     final token = await _auth.accessToken;

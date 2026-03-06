@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'admin/admin_app.dart';
 import 'core/theme/app_theme.dart';
@@ -39,6 +40,16 @@ class DonskihApp extends StatelessWidget {
       theme: AppTheme.light.copyWith(
         textTheme: GoogleFonts.montserratTextTheme(AppTheme.light.textTheme),
       ),
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: const [
+        Locale('ru'),
+        Locale('en'),
+      ],
+      locale: const Locale('ru'),
       initialRoute: '/',
       routes: {
         '/': (context) => const AuthScreen(),

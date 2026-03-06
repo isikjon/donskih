@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -5,10 +7,13 @@ import 'package:image_picker/image_picker.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../core/models/chat_message.dart';
+import '../../../core/models/user.dart';
 import '../../../core/services/chat_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../components/app_avatar.dart';
+import '../media_viewer/media_viewer_screen.dart';
+import '../profile/user_profile_screen.dart';
 
 // ---------------------------------------------------------------------------
 // Display item types — single message or a photo group
@@ -63,6 +68,11 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
   bool _isUploading = false;
   bool _showScrollToBottom = false;
 
+  /// Tracks local file paths for optimistic image messages (tempId → filePath)
+  final Map<String, String> _localImagePaths = {};
+  /// Tracks upload progress for optimistic messages (tempId → 0.0..1.0)
+  final Map<String, double> _uploadProgressMap = {};
+
   @override
   void initState() {
     super.initState();
@@ -110,7 +120,6 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
     super.didChangeMetrics();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_scrollController.hasClients) return;
-      // Only auto-scroll if already near the bottom (not if user scrolled up to read)
       if (_scrollController.position.pixels < 300) {
         _scrollController.jumpTo(0);
       }
@@ -164,7 +173,6 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
     final text = _inputController.text.trim();
     if (text.isEmpty) return;
     _inputController.clear();
-    _inputFocus.unfocus();
     await _chat.sendTextMessage(text);
     _scrollToBottom();
   }
@@ -200,14 +208,58 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
       final groupId =
           result.images.length > 1 ? _uuid.v4() : null;
 
+      // Create optimistic placeholders so user sees images immediately
+      final tempIds = <String>[];
       for (int i = 0; i < result.images.length; i++) {
-        final url = await _chat.uploadImage(result.images[i]);
+        final tempId = 'upload_${DateTime.now().millisecondsSinceEpoch}_$i';
+        tempIds.add(tempId);
+
+        final isLast = i == result.images.length - 1;
+        final cap = (isLast && result.caption.isNotEmpty)
+            ? result.caption
+            : null;
+
+        _localImagePaths[tempId] = result.images[i].path;
+        _uploadProgressMap[tempId] = 0.0;
+
+        final placeholder = ChatMessage(
+          id: tempId,
+          userId: _chat.currentUserId ?? '',
+          senderName: '',
+          text: cap,
+          imageUrl: 'file://${result.images[i].path}',
+          groupId: groupId,
+          isDeleted: false,
+          isEdited: false,
+          createdAt: DateTime.now(),
+          status: MessageStatus.sending,
+          uploadProgress: 0.0,
+        );
+        _chat.addOptimistic(placeholder);
+      }
+      _scrollToBottom();
+
+      // Upload one by one
+      for (int i = 0; i < result.images.length; i++) {
+        final tempId = tempIds[i];
+        final url = await _chat.uploadImage(
+          result.images[i],
+          onProgress: (p) {
+            _uploadProgressMap[tempId] = p;
+            _chat.updateOptimisticProgress(tempId, p);
+          },
+        );
+
+        // Remove optimistic placeholder
+        _localImagePaths.remove(tempId);
+        _uploadProgressMap.remove(tempId);
+        _chat.removeOptimistic(tempId);
+
         if (url != null && mounted) {
-          // Caption only on the last image
-          final cap =
-              (i == result.images.length - 1 && result.caption.isNotEmpty)
-                  ? result.caption
-                  : null;
+          final isLast = i == result.images.length - 1;
+          final cap = (isLast && result.caption.isNotEmpty)
+              ? result.caption
+              : null;
           await _chat.sendImageMessage(url, caption: cap, groupId: groupId);
         }
       }
@@ -305,6 +357,40 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
     ));
   }
 
+  void _openMediaViewer(
+    BuildContext context, {
+    required List<String> imageUrls,
+    required int initialIndex,
+    String? caption,
+    String? heroTag,
+  }) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => MediaViewerScreen(
+          imageUrls: imageUrls,
+          initialIndex: initialIndex,
+          caption: caption,
+          heroTag: heroTag,
+        ),
+      ),
+    );
+  }
+
+  void _openUserProfile(
+    BuildContext context, {
+    required User user,
+    required String heroTag,
+  }) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => UserProfileScreen(
+          user: user,
+          heroTag: heroTag,
+        ),
+      ),
+    );
+  }
+
   // ---------------------------------------------------------------------------
   // Build
   // ---------------------------------------------------------------------------
@@ -312,121 +398,173 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     final kb = MediaQuery.of(context).viewInsets.bottom;
-    final navPad = MediaQuery.of(context).padding.bottom + 64.0;
-    final bottomPad = kb > 0 ? kb : navPad;
+    final navPad = MediaQuery.of(context).padding.bottom + 10.0;
+    // max() eliminates the "teleport" on iOS interactive dismiss:
+    // input tracks the keyboard down but never drops below navPad position.
+    final bottomPad = kb > navPad ? kb : navPad;
 
     return Column(
       children: [
         _buildHeader(),
         const Divider(height: 1),
         Expanded(
-          child: Stack(
-            children: [
-              StreamBuilder<List<ChatMessage>>(
-                stream: _chat.stream,
-                initialData: _chat.messages,
-                builder: (context, snapshot) {
-                  final msgs = snapshot.data ?? [];
-                  if (msgs.isEmpty) return _buildEmpty();
+          child: GestureDetector(
+            onTap: () => _inputFocus.unfocus(),
+            behavior: HitTestBehavior.translucent,
+            child: Stack(
+              children: [
+                StreamBuilder<List<ChatMessage>>(
+                  stream: _chat.stream,
+                  initialData: _chat.messages,
+                  builder: (context, snapshot) {
+                    final msgs = snapshot.data ?? [];
+                    if (msgs.isEmpty) return _buildEmpty();
 
-                  final items = _buildDisplayItems(msgs);
+                    final items = _buildDisplayItems(msgs);
 
-                  // Auto-scroll only when near bottom (pixels ≈ 0 in reversed list)
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (!_scrollController.hasClients) return;
-                    if (_scrollController.position.pixels < 140) {
-                      _scrollController.jumpTo(0);
-                    }
-                  });
-
-                  return ListView.builder(
-                    controller: _scrollController,
-                    // reverse: true → item 0 at BOTTOM (newest), N-1 at TOP (oldest)
-                    // This makes messages stick to the bottom naturally
-                    reverse: true,
-                    keyboardDismissBehavior:
-                        ScrollViewKeyboardDismissBehavior.onDrag,
-                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-                    itemCount: items.length,
-                    itemBuilder: (context, revIdx) {
-                      // origIdx: 0 = oldest (TOP), N-1 = newest (BOTTOM)
-                      final origIdx = items.length - 1 - revIdx;
-                      final item = items[origIdx];
-
-                      final DateTime thisDate = _itemDate(item);
-
-                      // Date divider: show ABOVE this item when day changes going up
-                      // "above" in reversed display = origIdx-1 (older)
-                      final olderItem =
-                          origIdx > 0 ? items[origIdx - 1] : null;
-                      final showDateDivider = olderItem == null ||
-                          !_sameDay(_itemDate(olderItem), thisDate);
-
-                      Widget child;
-                      if (item is _SingleItem) {
-                        final msg = item.message;
-                        final isMe = _chat.isMyMessage(msg);
-
-                        // Avatar at BOTTOM of group = when next newer item (origIdx+1)
-                        // is from different user OR this is the newest message
-                        final newerItem = origIdx < items.length - 1
-                            ? items[origIdx + 1]
-                            : null;
-                        final showAvatar = !isMe &&
-                            (newerItem == null ||
-                                _itemUserId(newerItem) != msg.userId);
-                        final isTail = showAvatar;
-
-                        child = _MessageBubble(
-                          message: msg,
-                          isMe: isMe,
-                          showAvatar: showAvatar,
-                          isTail: isTail,
-                          onLongPress: () => _showMessageMenu(msg),
-                        );
-                      } else {
-                        final g = item as _GroupItem;
-                        final isMe = _chat.isMyMessage(g.messages.first);
-                        final newerItem = origIdx < items.length - 1
-                            ? items[origIdx + 1]
-                            : null;
-                        final showAvatar = !isMe &&
-                            (newerItem == null ||
-                                _itemUserId(newerItem) !=
-                                    g.messages.first.userId);
-
-                        child = _MediaGroupBubble(
-                          group: g,
-                          isMe: isMe,
-                          showAvatar: showAvatar,
-                          onLongPress: (msg) => _showMessageMenu(msg),
-                        );
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (!_scrollController.hasClients) return;
+                      if (_scrollController.position.pixels < 140) {
+                        _scrollController.jumpTo(0);
                       }
+                    });
 
-                      return Column(
-                        children: [
-                          // In reversed list, the Column renders top→bottom,
-                          // but items flow bottom→top. Divider goes above the item.
-                          if (showDateDivider) _DateDivider(date: thisDate),
-                          child,
-                        ],
-                      );
-                    },
-                  );
-                },
-              ),
+                    return ListView.builder(
+                      controller: _scrollController,
+                      reverse: true,
+                      keyboardDismissBehavior:
+                          ScrollViewKeyboardDismissBehavior.onDrag,
+                      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+                      itemCount: items.length,
+                      itemBuilder: (context, revIdx) {
+                        final origIdx = items.length - 1 - revIdx;
+                        final item = items[origIdx];
 
-              // Scroll-to-bottom button
-              AnimatedPositioned(
-                duration: const Duration(milliseconds: 200),
-                curve: Curves.easeOut,
-                right: 14,
-                bottom: _showScrollToBottom ? 14 : -60,
-                child: _ScrollToBottomButton(
-                  onTap: () => _scrollToBottom(animate: true),
+                        final DateTime thisDate = _itemDate(item);
+
+                        final olderItem =
+                            origIdx > 0 ? items[origIdx - 1] : null;
+                        final showDateDivider = olderItem == null ||
+                            !_sameDay(_itemDate(olderItem), thisDate);
+
+                        Widget child;
+                        if (item is _SingleItem) {
+                          final msg = item.message;
+                          final isMe = _chat.isMyMessage(msg);
+
+                          final newerItem = origIdx < items.length - 1
+                              ? items[origIdx + 1]
+                              : null;
+                          final showAvatar = !isMe &&
+                              (newerItem == null ||
+                                  _itemUserId(newerItem) != msg.userId);
+                          final isTail = showAvatar;
+
+                          child = _MessageBubble(
+                            message: msg,
+                            isMe: isMe,
+                            showAvatar: showAvatar,
+                            isTail: isTail,
+                            onLongPress: () => _showMessageMenu(msg),
+                            onAvatarTap: showAvatar
+                                ? () => _openUserProfile(
+                                      context,
+                                      user: User(
+                                        id: msg.userId,
+                                        name: msg.senderName,
+                                        avatarUrl: msg.senderPhotoUrl,
+                                      ),
+                                      heroTag: 'chat_avatar_${msg.id}',
+                                    )
+                                : null,
+                            avatarHeroTag:
+                                showAvatar ? 'chat_avatar_${msg.id}' : null,
+                            onImageTap: msg.imageUrl != null &&
+                                    msg.status != MessageStatus.sending
+                                ? () => _openMediaViewer(
+                                      context,
+                                      imageUrls: [msg.imageUrl!],
+                                      initialIndex: 0,
+                                      caption: msg.text,
+                                      heroTag: 'media_${msg.id}',
+                                    )
+                                : null,
+                            imageHeroTag: msg.imageUrl != null
+                                ? 'media_${msg.id}'
+                                : null,
+                          );
+                        } else {
+                          final g = item as _GroupItem;
+                          final isMe = _chat.isMyMessage(g.messages.first);
+                          final newerItem = origIdx < items.length - 1
+                              ? items[origIdx + 1]
+                              : null;
+                          final showAvatar = !isMe &&
+                              (newerItem == null ||
+                                  _itemUserId(newerItem) !=
+                                      g.messages.first.userId);
+                          final groupImageMessages = g.messages
+                              .where((m) => m.imageUrl != null)
+                              .toList();
+                          final groupUrls = groupImageMessages
+                              .map((m) => m.imageUrl!)
+                              .toList();
+
+                          child = _MediaGroupBubble(
+                            group: g,
+                            isMe: isMe,
+                            showAvatar: showAvatar,
+                            onLongPress: (msg) => _showMessageMenu(msg),
+                            onAvatarTap: showAvatar
+                                ? () => _openUserProfile(
+                                      context,
+                                      user: User(
+                                        id: g.messages.first.userId,
+                                        name: g.messages.first.senderName,
+                                        avatarUrl:
+                                            g.messages.first.senderPhotoUrl,
+                                      ),
+                                      heroTag: 'chat_avatar_${g.messages.first.id}',
+                                    )
+                                : null,
+                            avatarHeroTag: showAvatar
+                                ? 'chat_avatar_${g.messages.first.id}'
+                                : null,
+                            onImageTap: groupUrls.isNotEmpty
+                                ? (int index) => _openMediaViewer(
+                                      context,
+                                      imageUrls: groupUrls,
+                                      initialIndex: index,
+                                      caption: g.caption,
+                                      heroTag: 'media_${groupImageMessages[index].id}',
+                                    )
+                                : null,
+                          );
+                        }
+
+                        return Column(
+                          children: [
+                            if (showDateDivider)
+                              _DateDivider(date: thisDate),
+                            child,
+                          ],
+                        );
+                      },
+                    );
+                  },
                 ),
-              ),
-            ],
+
+                AnimatedPositioned(
+                  duration: const Duration(milliseconds: 200),
+                  curve: Curves.easeOut,
+                  right: 14,
+                  bottom: _showScrollToBottom ? 14 : -60,
+                  child: _ScrollToBottomButton(
+                    onTap: () => _scrollToBottom(animate: true),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
         _buildInput(bottomPad),
@@ -494,11 +632,9 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
   }
 
   Widget _buildInput(double bottomPad) {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 150),
-      curve: Curves.easeOut,
+    return Container(
       padding:
-          EdgeInsets.only(left: 8, right: 8, top: 8, bottom: bottomPad + 4),
+          EdgeInsets.only(left: 8, right: 8, top: 8, bottom: bottomPad),
       decoration: const BoxDecoration(
         color: AppColors.surface,
         border: Border(top: BorderSide(color: AppColors.border, width: 0.5)),
@@ -541,7 +677,6 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
                     textInputAction: TextInputAction.send,
                     maxLines: null,
                     onSubmitted: (_) => _send(),
-                    onTapOutside: (_) => _inputFocus.unfocus(),
                     style: AppTypography.bodyMedium,
                     decoration: InputDecoration(
                       hintText: _editingMessage != null
@@ -841,6 +976,9 @@ class _MediaGroupBubble extends StatelessWidget {
   final bool isMe;
   final bool showAvatar;
   final void Function(ChatMessage) onLongPress;
+  final void Function(int index)? onImageTap;
+  final VoidCallback? onAvatarTap;
+  final String? avatarHeroTag;
 
   static const double _maxWidth = 260;
   static const double _gap = 2;
@@ -850,6 +988,9 @@ class _MediaGroupBubble extends StatelessWidget {
     required this.isMe,
     required this.showAvatar,
     required this.onLongPress,
+    this.onImageTap,
+    this.onAvatarTap,
+    this.avatarHeroTag,
   });
 
   @override
@@ -895,48 +1036,7 @@ class _MediaGroupBubble extends StatelessWidget {
                         ),
                       ),
                     ),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(14),
-                    child: _buildGrid(),
-                  ),
-                  if (group.caption != null && group.caption!.isNotEmpty)
-                    Container(
-                      constraints: const BoxConstraints(maxWidth: _maxWidth),
-                      margin: const EdgeInsets.only(top: 2),
-                      padding: const EdgeInsets.fromLTRB(12, 6, 12, 8),
-                      decoration: BoxDecoration(
-                        color: isMe
-                            ? AppColors.myMessage
-                            : AppColors.otherMessage,
-                        borderRadius: BorderRadius.circular(14),
-                        boxShadow: const [
-                          BoxShadow(
-                              color: AppColors.shadow,
-                              blurRadius: 3,
-                              offset: Offset(0, 1))
-                        ],
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Align(
-                            alignment: Alignment.centerLeft,
-                            child: Text(
-                              group.caption!,
-                              style: AppTypography.bodyMedium.copyWith(
-                                  color: AppColors.textPrimary, height: 1.35),
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            group.messages.last.timeFormatted,
-                            style: AppTypography.labelSmall.copyWith(
-                                fontSize: 10, color: AppColors.textTertiary),
-                          ),
-                        ],
-                      ),
-                    ),
+                  _buildUnifiedBubble(),
                 ],
               ),
             ),
@@ -946,9 +1046,86 @@ class _MediaGroupBubble extends StatelessWidget {
     );
   }
 
+  Widget _buildUnifiedBubble() {
+    final hasCaption = group.caption != null && group.caption!.isNotEmpty;
+    final lastMsg = group.messages.last;
+
+    return Container(
+      constraints: const BoxConstraints(maxWidth: _maxWidth),
+      decoration: BoxDecoration(
+        color: isMe ? AppColors.myMessage : AppColors.otherMessage,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: const [
+          BoxShadow(
+            color: AppColors.shadow,
+            blurRadius: 3,
+            offset: Offset(0, 1),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildGrid(),
+            if (hasCaption)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 6, 12, 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      group.caption!,
+                      style: AppTypography.bodyMedium.copyWith(
+                          color: AppColors.textPrimary, height: 1.35),
+                    ),
+                    const SizedBox(height: 2),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          lastMsg.timeFormatted,
+                          style: AppTypography.labelSmall.copyWith(
+                              fontSize: 10, color: AppColors.textTertiary),
+                        ),
+                        if (isMe) ...[
+                          const SizedBox(width: 3),
+                          _statusIconFor(lastMsg, color: AppColors.textTertiary),
+                        ],
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _statusIconFor(ChatMessage msg, {Color? color}) {
+    final c = color ?? AppColors.textTertiary;
+    switch (msg.status) {
+      case MessageStatus.sending:
+        return Icon(Icons.access_time, size: 12, color: c);
+      case MessageStatus.sent:
+        return Icon(Icons.check, size: 12, color: c);
+      case MessageStatus.delivered:
+        return Icon(Icons.done_all, size: 12, color: c);
+    }
+  }
+
+  List<ChatMessage> get _messagesWithImages =>
+      group.messages.where((m) => m.imageUrl != null).toList();
+
   Widget _buildAvatar(ChatMessage msg) {
+    Widget child;
     if (msg.senderPhotoUrl != null) {
-      return ClipOval(
+      child = ClipOval(
         child: CachedNetworkImage(
           imageUrl: msg.senderPhotoUrl!,
           width: 32,
@@ -958,8 +1135,17 @@ class _MediaGroupBubble extends StatelessWidget {
               AppAvatar(name: msg.senderName, size: AvatarSize.small),
         ),
       );
+    } else {
+      child = AppAvatar(name: msg.senderName, size: AvatarSize.small);
     }
-    return AppAvatar(name: msg.senderName, size: AvatarSize.small);
+
+    if (avatarHeroTag != null) {
+      child = Hero(tag: avatarHeroTag!, child: child);
+    }
+    if (onAvatarTap != null) {
+      child = GestureDetector(onTap: onAvatarTap, child: child);
+    }
+    return child;
   }
 
   Widget _buildGrid() {
@@ -972,41 +1158,40 @@ class _MediaGroupBubble extends StatelessWidget {
     final hasCaption = group.caption != null && group.caption!.isNotEmpty;
 
     if (n == 1) {
-      return _gridPhoto(urls[0], _maxWidth, 200, showTime: !hasCaption, time: time);
+      return _gridPhoto(urls[0], _maxWidth, 200, index: 0,
+          showTime: !hasCaption, time: time);
     }
     if (n == 2) {
       return Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _gridPhoto(urls[0], (_maxWidth - _gap) / 2, 180),
+          _gridPhoto(urls[0], (_maxWidth - _gap) / 2, 180, index: 0),
           const SizedBox(width: _gap),
-          _gridPhoto(urls[1], (_maxWidth - _gap) / 2, 180,
+          _gridPhoto(urls[1], (_maxWidth - _gap) / 2, 180, index: 1,
               showTime: !hasCaption, time: time),
         ],
       );
     }
     if (n == 3) {
-      // 1 tall on left + 2 stacked on right
       final half = (_maxWidth - _gap) / 2;
       return Row(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _gridPhoto(urls[0], half, 180 + _gap + 130),
+          _gridPhoto(urls[0], half, 180 + _gap + 130, index: 0),
           const SizedBox(width: _gap),
           Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              _gridPhoto(urls[1], half, 180),
+              _gridPhoto(urls[1], half, 180, index: 1),
               const SizedBox(height: _gap),
-              _gridPhoto(urls[2], half, 130,
+              _gridPhoto(urls[2], half, 130, index: 2,
                   showTime: !hasCaption, time: time),
             ],
           ),
         ],
       );
     }
-    // 4+ → 2-column grid, last cell shows "+N" if more than 4
     final showCount = n > 4 ? n - 4 : 0;
     final displayUrls = urls.take(4).toList();
     return Column(
@@ -1015,21 +1200,22 @@ class _MediaGroupBubble extends StatelessWidget {
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _gridPhoto(displayUrls[0], (_maxWidth - _gap) / 2, 130),
+            _gridPhoto(displayUrls[0], (_maxWidth - _gap) / 2, 130, index: 0),
             const SizedBox(width: _gap),
-            _gridPhoto(displayUrls[1], (_maxWidth - _gap) / 2, 130),
+            _gridPhoto(displayUrls[1], (_maxWidth - _gap) / 2, 130, index: 1),
           ],
         ),
         const SizedBox(height: _gap),
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _gridPhoto(displayUrls[2], (_maxWidth - _gap) / 2, 130),
+            _gridPhoto(displayUrls[2], (_maxWidth - _gap) / 2, 130, index: 2),
             const SizedBox(width: _gap),
             _gridPhotoWithOverlay(
               displayUrls[3],
               (_maxWidth - _gap) / 2,
               130,
+              index: 3,
               showTime: !hasCaption,
               time: time,
               overlapCount: showCount,
@@ -1040,29 +1226,56 @@ class _MediaGroupBubble extends StatelessWidget {
     );
   }
 
+  Widget _gridImage(String url) {
+    if (url.startsWith('file://')) {
+      return Image.file(
+        File(url.replaceFirst('file://', '')),
+        fit: BoxFit.cover,
+      );
+    }
+    return CachedNetworkImage(
+      imageUrl: url,
+      fit: BoxFit.cover,
+      placeholder: (_, __) => Container(color: AppColors.surfaceTertiary),
+      errorWidget: (_, __, ___) => Container(
+        color: AppColors.surfaceTertiary,
+        child: const Icon(Icons.broken_image_outlined,
+            color: AppColors.textTertiary),
+      ),
+    );
+  }
+
   Widget _gridPhoto(
     String url,
     double w,
     double h, {
+    int? index,
     bool showTime = false,
     String? time,
   }) {
+    Widget content = _gridImage(url);
+    if (index != null &&
+        onImageTap != null &&
+        index < _messagesWithImages.length &&
+        _messagesWithImages[index].status != MessageStatus.sending) {
+      final heroTag = 'media_${_messagesWithImages[index].id}';
+      content = Hero(
+        tag: heroTag,
+        child: GestureDetector(
+          onTap: () => onImageTap!(index),
+          child: content,
+        ),
+      );
+    }
     return SizedBox(
       width: w,
       height: h,
       child: Stack(
         fit: StackFit.expand,
         children: [
-          CachedNetworkImage(
-            imageUrl: url,
-            fit: BoxFit.cover,
-            placeholder: (_, __) => Container(color: AppColors.surfaceTertiary),
-            errorWidget: (_, __, ___) => Container(
-              color: AppColors.surfaceTertiary,
-              child: const Icon(Icons.broken_image_outlined,
-                  color: AppColors.textTertiary),
-            ),
-          ),
+          content,
+          if (group.messages.any((m) => m.imageUrl == url && m.status == MessageStatus.sending))
+            _uploadOverlayFor(group.messages.firstWhere((m) => m.imageUrl == url)),
           if (showTime && time != null)
             Positioned(
               bottom: 6,
@@ -1074,26 +1287,70 @@ class _MediaGroupBubble extends StatelessWidget {
     );
   }
 
+  Widget _uploadOverlayFor(ChatMessage msg) {
+    final p = msg.uploadProgress ?? 0.0;
+    return Positioned.fill(
+      child: Container(
+        color: Colors.black.withValues(alpha: 0.35),
+        child: Center(
+          child: SizedBox(
+            width: 36,
+            height: 36,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                CircularProgressIndicator(
+                  value: p > 0 ? p : null,
+                  strokeWidth: 2.5,
+                  color: Colors.white,
+                  backgroundColor: Colors.white24,
+                ),
+                Text(
+                  '${(p * 100).round()}%',
+                  style: const TextStyle(
+                    fontSize: 9,
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _gridPhotoWithOverlay(
     String url,
     double w,
     double h, {
+    int? index,
     bool showTime = false,
     String? time,
     int overlapCount = 0,
   }) {
+    Widget content = _gridImage(url);
+    if (index != null &&
+        onImageTap != null &&
+        index < _messagesWithImages.length &&
+        _messagesWithImages[index].status != MessageStatus.sending) {
+      final heroTag = 'media_${_messagesWithImages[index].id}';
+      content = Hero(
+        tag: heroTag,
+        child: GestureDetector(
+          onTap: () => onImageTap!(index),
+          child: content,
+        ),
+      );
+    }
     return SizedBox(
       width: w,
       height: h,
       child: Stack(
         fit: StackFit.expand,
         children: [
-          CachedNetworkImage(
-            imageUrl: url,
-            fit: BoxFit.cover,
-            placeholder: (_, __) => Container(color: AppColors.surfaceTertiary),
-            errorWidget: (_, __, ___) => Container(color: AppColors.surfaceTertiary),
-          ),
+          content,
           if (overlapCount > 0)
             Container(
               color: Colors.black.withValues(alpha: 0.5),
@@ -1125,8 +1382,17 @@ class _MediaGroupBubble extends StatelessWidget {
         color: Colors.black.withValues(alpha: 0.45),
         borderRadius: BorderRadius.circular(10),
       ),
-      child: Text(time,
-          style: const TextStyle(fontSize: 10, color: Colors.white)),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(time,
+              style: const TextStyle(fontSize: 10, color: Colors.white)),
+          if (isMe) ...[
+            const SizedBox(width: 3),
+            _statusIconFor(group.messages.last, color: Colors.white),
+          ],
+        ],
+      ),
     );
   }
 }
@@ -1141,6 +1407,10 @@ class _MessageBubble extends StatelessWidget {
   final bool showAvatar;
   final bool isTail;
   final VoidCallback onLongPress;
+  final VoidCallback? onImageTap;
+  final String? imageHeroTag;
+  final VoidCallback? onAvatarTap;
+  final String? avatarHeroTag;
 
   const _MessageBubble({
     required this.message,
@@ -1148,6 +1418,10 @@ class _MessageBubble extends StatelessWidget {
     required this.showAvatar,
     required this.isTail,
     required this.onLongPress,
+    this.onImageTap,
+    this.imageHeroTag,
+    this.onAvatarTap,
+    this.avatarHeroTag,
   });
 
   @override
@@ -1185,8 +1459,9 @@ class _MessageBubble extends StatelessWidget {
   }
 
   Widget _buildAvatar() {
+    Widget child;
     if (message.senderPhotoUrl != null) {
-      return ClipOval(
+      child = ClipOval(
         child: CachedNetworkImage(
           imageUrl: message.senderPhotoUrl!,
           width: 32,
@@ -1196,8 +1471,17 @@ class _MessageBubble extends StatelessWidget {
               AppAvatar(name: message.senderName, size: AvatarSize.small),
         ),
       );
+    } else {
+      child = AppAvatar(name: message.senderName, size: AvatarSize.small);
     }
-    return AppAvatar(name: message.senderName, size: AvatarSize.small);
+
+    if (avatarHeroTag != null) {
+      child = Hero(tag: avatarHeroTag!, child: child);
+    }
+    if (onAvatarTap != null) {
+      child = GestureDetector(onTap: onAvatarTap, child: child);
+    }
+    return child;
   }
 
   Widget _buildBubble() {
@@ -1249,6 +1533,89 @@ class _MessageBubble extends StatelessWidget {
     );
   }
 
+  bool get _isLocalFile => message.imageUrl?.startsWith('file://') ?? false;
+
+  Widget _imageWidget({double? width, double? height}) {
+    final url = message.imageUrl!;
+    if (_isLocalFile) {
+      final path = url.replaceFirst('file://', '');
+      return Image.file(
+        File(path),
+        fit: BoxFit.cover,
+        width: width,
+        height: height,
+      );
+    }
+    return CachedNetworkImage(
+      imageUrl: url,
+      fit: BoxFit.cover,
+      width: width,
+      placeholder: (_, __) => Container(
+        width: width ?? 260,
+        height: height ?? 180,
+        color: AppColors.surfaceTertiary,
+        child: const Center(
+            child: CircularProgressIndicator(
+                strokeWidth: 2, color: AppColors.primary)),
+      ),
+      errorWidget: (_, __, ___) => Container(
+        width: width ?? 260,
+        height: height ?? 80,
+        color: AppColors.surfaceTertiary,
+        child: const Icon(Icons.broken_image_outlined,
+            color: AppColors.textTertiary),
+      ),
+    );
+  }
+
+  Widget _uploadOverlay() {
+    if (message.status != MessageStatus.sending || message.uploadProgress == null) {
+      return const SizedBox.shrink();
+    }
+    final p = message.uploadProgress!;
+    return Positioned.fill(
+      child: Container(
+        color: Colors.black.withValues(alpha: 0.35),
+        child: Center(
+          child: SizedBox(
+            width: 48,
+            height: 48,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                CircularProgressIndicator(
+                  value: p > 0 ? p : null,
+                  strokeWidth: 3,
+                  color: Colors.white,
+                  backgroundColor: Colors.white24,
+                ),
+                Text(
+                  '${(p * 100).round()}%',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _wrappedImage({required double width}) {
+    Widget child = _imageWidget(width: width);
+    if (imageHeroTag != null) {
+      child = Hero(tag: imageHeroTag!, child: child);
+    }
+    if (onImageTap != null) {
+      child = GestureDetector(onTap: onImageTap, child: child);
+    }
+    return child;
+  }
+
   Widget _buildImageOnlyBubble() {
     return Container(
       constraints: const BoxConstraints(maxWidth: 260),
@@ -1257,26 +1624,8 @@ class _MessageBubble extends StatelessWidget {
         borderRadius: _bubbleBorderRadius(),
         child: Stack(
           children: [
-            CachedNetworkImage(
-              imageUrl: message.imageUrl!,
-              fit: BoxFit.cover,
-              width: 260,
-              placeholder: (_, __) => Container(
-                width: 260,
-                height: 180,
-                color: AppColors.surfaceTertiary,
-                child: const Center(
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2, color: AppColors.primary)),
-              ),
-              errorWidget: (_, __, ___) => Container(
-                width: 260,
-                height: 80,
-                color: AppColors.surfaceTertiary,
-                child: const Icon(Icons.broken_image_outlined,
-                    color: AppColors.textTertiary),
-              ),
-            ),
+            _wrappedImage(width: 260),
+            _uploadOverlay(),
             Positioned(
               bottom: 6,
               right: 8,
@@ -1303,18 +1652,11 @@ class _MessageBubble extends StatelessWidget {
                 padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
                 child: _senderName(),
               ),
-            CachedNetworkImage(
-              imageUrl: message.imageUrl!,
-              fit: BoxFit.cover,
-              width: 260,
-              placeholder: (_, __) => Container(
-                width: 260,
-                height: 180,
-                color: AppColors.surfaceTertiary,
-                child: const Center(
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2, color: AppColors.primary)),
-              ),
+            Stack(
+              children: [
+                _wrappedImage(width: 260),
+                _uploadOverlay(),
+              ],
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 6, 12, 8),
@@ -1332,6 +1674,19 @@ class _MessageBubble extends StatelessWidget {
             color: AppColors.primary, fontWeight: FontWeight.w700));
   }
 
+  Widget _statusIcon({Color? color}) {
+    if (!isMe) return const SizedBox.shrink();
+    final c = color ?? AppColors.textTertiary;
+    switch (message.status) {
+      case MessageStatus.sending:
+        return Icon(Icons.access_time, size: 12, color: c);
+      case MessageStatus.sent:
+        return Icon(Icons.check, size: 12, color: c);
+      case MessageStatus.delivered:
+        return Icon(Icons.done_all, size: 12, color: c);
+    }
+  }
+
   Widget _inlineMeta() {
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -1345,6 +1700,10 @@ class _MessageBubble extends StatelessWidget {
         Text(message.timeFormatted,
             style: AppTypography.labelSmall
                 .copyWith(fontSize: 10, color: AppColors.textTertiary)),
+        if (isMe) ...[
+          const SizedBox(width: 3),
+          _statusIcon(),
+        ],
       ],
     );
   }
@@ -1367,6 +1726,10 @@ class _MessageBubble extends StatelessWidget {
                     fontStyle: FontStyle.italic)),
           Text(message.timeFormatted,
               style: const TextStyle(fontSize: 10, color: Colors.white)),
+          if (isMe) ...[
+            const SizedBox(width: 3),
+            _statusIcon(color: Colors.white),
+          ],
         ],
       ),
     );
@@ -1508,7 +1871,7 @@ class _PhotoPreviewPageState extends State<_PhotoPreviewPage> {
     final isMulti = _images.length > 1;
     return Scaffold(
       backgroundColor: Colors.black,
-      resizeToAvoidBottomInset: true,
+      resizeToAvoidBottomInset: false,
       body: SafeArea(
         child: Column(
           children: [
@@ -1540,7 +1903,7 @@ class _PhotoPreviewPageState extends State<_PhotoPreviewPage> {
             // Main image
             Expanded(
               child: GestureDetector(
-                onTap: () => _captionFocus.unfocus(),
+                onTap: () => _captionFocus.requestFocus(),
                 child: PageView.builder(
                   controller: _pageCtrl,
                   itemCount: _images.length,

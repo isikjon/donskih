@@ -11,6 +11,104 @@ import '../../../core/theme/app_spacing.dart';
 import '../../components/app_button.dart';
 import '../../components/app_text_field.dart';
 
+// ---------------------------------------------------------------------------
+// Country config
+// ---------------------------------------------------------------------------
+
+class _Country {
+  final String flagUrl; // Apple emoji PNG from CDN
+  final String name;
+  final String prefix;
+  final String mask;    // # = digit placeholder
+  final String hint;
+
+  const _Country({
+    required this.flagUrl,
+    required this.name,
+    required this.prefix,
+    required this.mask,
+    required this.hint,
+  });
+}
+
+// Apple emoji CDN (jsdelivr)
+const _appleEmojiBase =
+    'https://cdn.jsdelivr.net/npm/emoji-datasource-apple/img/apple/64';
+
+const _countries = [
+  _Country(
+    // 🇷🇺 = 1f1f7-1f1fa
+    flagUrl: '$_appleEmojiBase/1f1f7-1f1fa.png',
+    name: 'Россия',
+    prefix: '+7',
+    mask: '+7 (###) ###-##-##',
+    hint: '+7 (999) 123-45-67',
+  ),
+  _Country(
+    // 🇺🇿 = 1f1fa-1f1ff
+    flagUrl: '$_appleEmojiBase/1f1fa-1f1ff.png',
+    name: 'Узбекистан',
+    prefix: '+998',
+    mask: '+998 ## ###-##-##',
+    hint: '+998 90 123-45-67',
+  ),
+];
+
+// ---------------------------------------------------------------------------
+// Phone mask formatter
+// ---------------------------------------------------------------------------
+
+class _PhoneMaskFormatter extends TextInputFormatter {
+  final String mask; // e.g. "+7 (###) ###-##-##"
+
+  _PhoneMaskFormatter(this.mask);
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    // Extract only digits from the new input
+    final digits = newValue.text.replaceAll(RegExp(r'\D'), '');
+
+    // Count digits in the prefix (non-# chars before first #)
+    final prefixDigits = mask
+        .substring(0, mask.indexOf('#'))
+        .replaceAll(RegExp(r'\D'), '');
+
+    // The digits the user typed (without prefix digits)
+    final userDigits = digits.startsWith(prefixDigits)
+        ? digits.substring(prefixDigits.length)
+        : digits;
+
+    final buf = StringBuffer();
+    int digitIdx = 0;
+
+    for (int i = 0; i < mask.length; i++) {
+      final ch = mask[i];
+      if (ch == '#') {
+        if (digitIdx < userDigits.length) {
+          buf.write(userDigits[digitIdx++]);
+        } else {
+          break;
+        }
+      } else {
+        // Only write separator if we've already written at least one user digit
+        // or it's part of the prefix
+        if (digitIdx > 0 || i < mask.indexOf('#')) {
+          buf.write(ch);
+        }
+      }
+    }
+
+    final text = buf.toString();
+    return TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
+    );
+  }
+}
+
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
 
@@ -26,6 +124,7 @@ class _AuthScreenState extends State<AuthScreen> with WidgetsBindingObserver {
   String? _error;
   String _sessionId = '';
   bool _botOpened = false;
+  _Country _selectedCountry = _countries[0];
 
   @override
   void initState() {
@@ -37,35 +136,73 @@ class _AuthScreenState extends State<AuthScreen> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _pollTimer?.cancel();
     _phoneController.dispose();
     _codeController.dispose();
     super.dispose();
   }
+
+  Timer? _pollTimer;
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed &&
         _step == _AuthStep.linkTelegram &&
         _botOpened) {
-      _checkLinkAndProceed();
+      _startPolling();
     }
   }
 
-  Future<void> _checkExistingSession() async {
-    final loggedIn = await AuthService().isLoggedIn;
-    if (loggedIn && mounted) {
+  void _startPolling() {
+    _pollTimer?.cancel();
+    _checkLinkStatus();
+    // Keep polling every 3s while user is on this screen
+    _pollTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+      if (_step != _AuthStep.linkTelegram || !mounted) {
+        _pollTimer?.cancel();
+        return;
+      }
+      _checkLinkStatus();
+    });
+  }
+
+  Future<void> _checkLinkStatus() async {
+    final auth = AuthService();
+    final user = await auth.fetchProfile();
+    if (!mounted) return;
+
+    if (user != null && user['telegram_account'] != null) {
+      _pollTimer?.cancel();
       Navigator.of(context).pushReplacementNamed('/home');
     }
   }
 
+  Future<void> _checkExistingSession() async {
+    final auth = AuthService();
+    final loggedIn = await auth.isLoggedIn;
+    if (!loggedIn || !mounted) return;
+
+    // Fetch fresh profile to confirm Telegram link
+    final user = await auth.fetchProfile();
+    if (!mounted) return;
+
+    if (user != null && user['telegram_account'] != null) {
+      Navigator.of(context).pushReplacementNamed('/home');
+    } else if (user != null) {
+      // Logged in but Telegram not linked — force link step
+      setState(() => _step = _AuthStep.linkTelegram);
+    }
+  }
+
   Future<void> _sendCode() async {
-    final phone = _phoneController.text.trim();
-    if (phone.isEmpty) {
+    final raw = _phoneController.text.trim();
+    if (raw.isEmpty) {
       setState(() => _error = 'Введите номер телефона');
       return;
     }
 
-    final formatted = phone.startsWith('+') ? phone : '+$phone';
+    // Strip everything except digits and leading +
+    final formatted = '+${raw.replaceAll(RegExp(r'\D'), '')}';
 
     setState(() {
       _isLoading = true;
@@ -156,27 +293,24 @@ class _AuthScreenState extends State<AuthScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _checkLinkAndProceed() async {
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
 
     final auth = AuthService();
-    await auth.fetchProfile();
-    final user = await auth.getUser();
+    final user = await auth.fetchProfile();
 
-    if (mounted) {
-      if (user != null && user['telegram_account'] != null) {
-        Navigator.of(context).pushReplacementNamed('/home');
-      } else {
-        setState(() {
-          _isLoading = false;
-          _error = 'Telegram ещё не привязан. Нажмите Start в боте и поделитесь контактом.';
-        });
-      }
-    }
-  }
+    if (!mounted) return;
 
-  void _goHome() {
-    if (mounted) {
+    if (user != null && user['telegram_account'] != null) {
+      _pollTimer?.cancel();
       Navigator.of(context).pushReplacementNamed('/home');
+    } else {
+      setState(() {
+        _isLoading = false;
+        _error = 'Telegram ещё не привязан.\nНажмите Start в боте и поделитесь контактом.';
+      });
     }
   }
 
@@ -267,20 +401,60 @@ class _AuthScreenState extends State<AuthScreen> with WidgetsBindingObserver {
     }
   }
 
+  void _onCountryChanged(_Country country) {
+    setState(() {
+      _selectedCountry = country;
+      _phoneController.clear();
+    });
+  }
+
   Widget _buildPhoneStep() {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        AppTextField(
-          controller: _phoneController,
-          label: 'Номер телефона',
-          hint: '+7 999 123 45 67',
-          prefixIcon: Icons.phone_outlined,
-          keyboardType: TextInputType.phone,
-          textInputAction: TextInputAction.done,
-          onSubmitted: (_) => _sendCode(),
-          inputFormatters: [
-            FilteringTextInputFormatter.allow(RegExp(r'[\d+\s\-()]')),
-          ],
+        Text('Номер телефона', style: AppTypography.labelLarge),
+        const SizedBox(height: 8),
+        Container(
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(AppSpacing.radiusMedium),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Row(
+            children: [
+              // Country selector
+              _CountrySelector(
+                selected: _selectedCountry,
+                countries: _countries,
+                onChanged: _onCountryChanged,
+              ),
+              Container(width: 1, height: 28, color: AppColors.border),
+              // Phone input
+              Expanded(
+                child: TextFormField(
+                  controller: _phoneController,
+                  keyboardType: TextInputType.phone,
+                  textInputAction: TextInputAction.done,
+                  onFieldSubmitted: (_) => _sendCode(),
+                  style: AppTypography.bodyLarge,
+                  inputFormatters: [
+                    _PhoneMaskFormatter(_selectedCountry.mask),
+                  ],
+                  decoration: InputDecoration(
+                    hintText: _selectedCountry.hint,
+                    hintStyle: AppTypography.bodyLarge.copyWith(
+                      color: AppColors.textTertiary,
+                    ),
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 14),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
         const SizedBox(height: 24),
         AppButton(
@@ -349,7 +523,7 @@ class _AuthScreenState extends State<AuthScreen> with WidgetsBindingObserver {
           onPressed: _openBot,
           icon: Icons.open_in_new_rounded,
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 16),
         if (_isLoading)
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 16),
@@ -363,21 +537,77 @@ class _AuthScreenState extends State<AuthScreen> with WidgetsBindingObserver {
           ),
         if (!_isLoading)
           AppButton(
-            text: 'Я привязал — продолжить',
+            text: 'Я привязал — проверить',
             type: AppButtonType.secondary,
             onPressed: _checkLinkAndProceed,
           ),
-        const SizedBox(height: 16),
-        TextButton(
-          onPressed: _goHome,
-          child: Text(
-            'Пропустить',
-            style: AppTypography.buttonSmall.copyWith(color: AppColors.textTertiary),
-          ),
-        ),
       ],
     );
   }
 }
 
 enum _AuthStep { phone, code, linkTelegram }
+
+// ---------------------------------------------------------------------------
+
+class _CountrySelector extends StatelessWidget {
+  final _Country selected;
+  final List<_Country> countries;
+  final ValueChanged<_Country> onChanged;
+
+  const _CountrySelector({
+    required this.selected,
+    required this.countries,
+    required this.onChanged,
+  });
+
+  Widget _flag(String url) => Image.network(
+        url,
+        width: 28,
+        height: 28,
+        errorBuilder: (_, __, ___) =>
+            const Icon(Icons.flag_outlined, size: 24),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<_Country>(
+      onSelected: onChanged,
+      color: AppColors.surface,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      offset: const Offset(0, 52),
+      itemBuilder: (_) => countries
+          .map(
+            (c) => PopupMenuItem<_Country>(
+              value: c,
+              child: Row(
+                children: [
+                  _flag(c.flagUrl),
+                  const SizedBox(width: 10),
+                  Text(c.name, style: AppTypography.bodyMedium),
+                  const SizedBox(width: 6),
+                  Text(
+                    c.prefix,
+                    style: AppTypography.bodySmall
+                        .copyWith(color: AppColors.textTertiary),
+                  ),
+                ],
+              ),
+            ),
+          )
+          .toList(),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _flag(selected.flagUrl),
+            const SizedBox(width: 4),
+            const Icon(Icons.arrow_drop_down,
+                size: 20, color: AppColors.textTertiary),
+          ],
+        ),
+      ),
+    );
+  }
+}
