@@ -3,6 +3,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.models.user import User
 from app.database import get_db
@@ -59,7 +60,11 @@ async def get_user_profile(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid user id")
 
-    result = await db.execute(select(User).where(User.id == uid))
+    result = await db.execute(
+        select(User)
+        .where(User.id == uid)
+        .options(selectinload(User.telegram_account))
+    )
     user = result.scalar_one_or_none()
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
