@@ -5,6 +5,50 @@ import 'dart:typed_data';
 
 import 'upload_picker.dart';
 
+/// Upload file via XMLHttpRequest with real progress tracking (web only).
+Future<Map<String, dynamic>?> uploadWithProgressWeb({
+  required String url,
+  required String fieldName,
+  required String filename,
+  required List<int> bytes,
+  required Map<String, String> headers,
+  void Function(int sent, int total)? onProgress,
+}) async {
+  final completer = Completer<Map<String, dynamic>?>();
+  final formData = html.FormData();
+  final blob = html.Blob([Uint8List.fromList(bytes)]);
+  formData.appendBlob(fieldName, blob, filename);
+
+  final xhr = html.HttpRequest();
+  xhr.open('POST', url);
+  headers.forEach((k, v) => xhr.setRequestHeader(k, v));
+
+  xhr.upload.onProgress.listen((e) {
+    if (e.lengthComputable && onProgress != null) {
+      onProgress(e.loaded ?? 0, e.total ?? bytes.length);
+    }
+  });
+
+  xhr.onLoad.listen((_) {
+    if (xhr.status == 200) {
+      try {
+        completer.complete(jsonDecode(xhr.responseText ?? '{}') as Map<String, dynamic>);
+      } catch (e) {
+        completer.completeError('Ошибка парсинга ответа: $e');
+      }
+    } else {
+      completer.completeError('HTTP ${xhr.status}: ${xhr.responseText}');
+    }
+  });
+
+  xhr.onError.listen((_) {
+    completer.completeError('Ошибка сети при загрузке');
+  });
+
+  xhr.send(formData);
+  return completer.future;
+}
+
 Future<UploadPickResult?> pickVideoFileImpl() async {
   return _pickFileImpl('.mp4,.mov,.m4v,.mkv,.webm,.m3u8');
 }

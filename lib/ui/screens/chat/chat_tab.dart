@@ -65,6 +65,7 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
   static const _uuid = Uuid();
 
   ChatMessage? _editingMessage;
+  ChatMessage? _replyingToMessage;
   bool _isUploading = false;
   bool _showScrollToBottom = false;
 
@@ -135,15 +136,18 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
     int i = 0;
     while (i < msgs.length) {
       final msg = msgs[i];
+      if (msg.isDeleted) {
+        i++;
+        continue;
+      }
       final gid = msg.groupId;
-      if (gid != null && !msg.isDeleted && msg.imageUrl != null) {
-        // Collect all consecutive messages with the same groupId
+      if (gid != null && msg.imageUrl != null) {
         final group = <ChatMessage>[];
         while (i < msgs.length && msgs[i].groupId == gid) {
-          group.add(msgs[i]);
+          if (!msgs[i].isDeleted) group.add(msgs[i]);
           i++;
         }
-        // Caption = last message's text (if any)
+        if (group.isEmpty) continue;
         String? caption;
         for (final m in group.reversed) {
           if (m.text != null && m.text!.isNotEmpty) {
@@ -172,8 +176,10 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
     }
     final text = _inputController.text.trim();
     if (text.isEmpty) return;
+    final replyId = _replyingToMessage?.id;
     _inputController.clear();
-    await _chat.sendTextMessage(text);
+    _cancelReply();
+    await _chat.sendTextMessage(text, replyToMessageId: replyId);
     _scrollToBottom();
   }
 
@@ -260,7 +266,9 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
           final cap = (isLast && result.caption.isNotEmpty)
               ? result.caption
               : null;
-          await _chat.sendImageMessage(url, caption: cap, groupId: groupId);
+          final replyId = _replyingToMessage?.id;
+          if (i == 0) _cancelReply();
+          await _chat.sendImageMessage(url, caption: cap, groupId: groupId, replyToMessageId: replyId);
         }
       }
       if (mounted) _scrollToBottom();
@@ -283,6 +291,13 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
       builder: (_) => _MessageMenuSheet(
         message: msg,
         isMe: isMe,
+        onReply: () {
+          setState(() {
+            _replyingToMessage = msg;
+            _editingMessage = null;
+          });
+          _inputFocus.requestFocus();
+        },
         onCopy: msg.text != null
             ? () {
                 Clipboard.setData(ClipboardData(text: msg.text!));
@@ -295,9 +310,14 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
     );
   }
 
+  void _cancelReply() {
+    setState(() => _replyingToMessage = null);
+  }
+
   void _startEdit(ChatMessage msg) {
     setState(() {
       _editingMessage = msg;
+      _replyingToMessage = null;
       _inputController.text = msg.text ?? '';
     });
     _inputFocus.requestFocus();
@@ -421,6 +441,7 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
                     if (msgs.isEmpty) return _buildEmpty();
 
                     final items = _buildDisplayItems(msgs);
+                    final replyToMap = {for (final m in msgs) m.id: m};
 
                     WidgetsBinding.instance.addPostFrameCallback((_) {
                       if (!_scrollController.hasClients) return;
@@ -462,6 +483,10 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
 
                           child = _MessageBubble(
                             message: msg,
+                            replyToMessage: msg.replyToMessageId != null
+                                ? replyToMap[msg.replyToMessageId]
+                                : null,
+                            onReplyBlockTap: _scrollToMessageId,
                             isMe: isMe,
                             showAvatar: showAvatar,
                             isTail: isTail,
@@ -512,6 +537,10 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
 
                           child = _MediaGroupBubble(
                             group: g,
+                            replyToMessage: g.messages.first.replyToMessageId != null
+                                ? replyToMap[g.messages.first.replyToMessageId]
+                                : null,
+                            onReplyBlockTap: _scrollToMessageId,
                             isMe: isMe,
                             showAvatar: showAvatar,
                             onLongPress: (msg) => _showMessageMenu(msg),
@@ -542,11 +571,26 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
                           );
                         }
 
+                        final replyTarget = item is _SingleItem
+                            ? (item as _SingleItem).message
+                            : (item as _GroupItem).messages.first;
+                        final wrappedChild = _SwipeToReplyWrapper(
+                          message: replyTarget,
+                          onReply: (m) {
+                            setState(() {
+                              _replyingToMessage = m;
+                              _editingMessage = null;
+                            });
+                            _inputFocus.requestFocus();
+                          },
+                          child: child,
+                        );
+
                         return Column(
                           children: [
                             if (showDateDivider)
                               _DateDivider(date: thisDate),
-                            child,
+                            wrappedChild,
                           ],
                         );
                       },
@@ -567,9 +611,49 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
             ),
           ),
         ),
+        AnimatedSize(
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOut,
+          child: _replyingToMessage != null
+              ? _ReplyPreview(
+                  message: _replyingToMessage!,
+                  onClose: _cancelReply,
+                )
+              : const SizedBox.shrink(),
+        ),
         _buildInput(bottomPad),
       ],
     );
+  }
+
+  void _scrollToMessageId(String messageId) {
+    final msgs = _chat.messages;
+    final items = _buildDisplayItems(msgs);
+    int? origIdx;
+    for (int i = 0; i < items.length; i++) {
+      if (_itemContainsMessageId(items[i], messageId)) {
+        origIdx = i;
+        break;
+      }
+    }
+    if (origIdx == null) return;
+    final revIdx = items.length - 1 - origIdx;
+    const estimatedItemHeight = 100.0;
+    final offset = revIdx * estimatedItemHeight;
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        offset.clamp(0.0, _scrollController.position.maxScrollExtent),
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+    }
+  }
+
+  bool _itemContainsMessageId(_DisplayItem item, String messageId) {
+    return switch (item) {
+      _SingleItem s => s.message.id == messageId,
+      _GroupItem g => g.messages.any((m) => m.id == messageId),
+    };
   }
 
   /// Date of the first (chronologically oldest) message in a display item.
@@ -586,31 +670,31 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
 
   Widget _buildHeader() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
-      child: Row(
-        children: [
-          Container(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+          child: Row(
+            children: [
+              Container(
             width: 40,
             height: 40,
-            decoration: const BoxDecoration(
-              color: AppColors.primaryLight,
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.groups_outlined,
+                decoration: const BoxDecoration(
+                  color: AppColors.primaryLight,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.groups_outlined,
                 color: AppColors.primary, size: 22),
-          ),
-          const SizedBox(width: 12),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+              ),
+              const SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
               Text('Между нами девочка...', style: AppTypography.titleSmall),
               Text('Групповой чат',
                   style: AppTypography.labelSmall
                       .copyWith(color: AppColors.textTertiary)),
+                ],
+              ),
             ],
           ),
-        ],
-      ),
     );
   }
 
@@ -635,13 +719,13 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
     return Container(
       padding:
           EdgeInsets.only(left: 8, right: 8, top: 8, bottom: bottomPad),
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
+            decoration: const BoxDecoration(
+              color: AppColors.surface,
         border: Border(top: BorderSide(color: AppColors.border, width: 0.5)),
-      ),
+            ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
-        children: [
+              children: [
           if (_editingMessage != null) _buildEditBanner(),
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
@@ -661,36 +745,36 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
                           color: AppColors.textTertiary, size: 24),
                       onPressed: _pickImages,
                       padding: const EdgeInsets.all(8),
-                      constraints:
+                  constraints:
                           const BoxConstraints(minWidth: 40, minHeight: 40),
-                    ),
-              Expanded(
-                child: Container(
+                ),
+                Expanded(
+                  child: Container(
                   constraints: const BoxConstraints(maxHeight: 120),
-                  decoration: BoxDecoration(
-                    color: AppColors.background,
+                    decoration: BoxDecoration(
+                      color: AppColors.background,
                     borderRadius: BorderRadius.circular(22),
-                  ),
-                  child: TextField(
+                    ),
+                    child: TextField(
                     controller: _inputController,
                     focusNode: _inputFocus,
-                    textInputAction: TextInputAction.send,
-                    maxLines: null,
-                    onSubmitted: (_) => _send(),
-                    style: AppTypography.bodyMedium,
+                      textInputAction: TextInputAction.send,
+                      maxLines: null,
+                      onSubmitted: (_) => _send(),
+                      style: AppTypography.bodyMedium,
                     decoration: InputDecoration(
                       hintText: _editingMessage != null
                           ? 'Редактировать...'
                           : 'Сообщение',
                       hintStyle: AppTypography.bodyMedium
                           .copyWith(color: AppColors.textTertiary),
-                      border: InputBorder.none,
+                        border: InputBorder.none,
                       contentPadding: const EdgeInsets.symmetric(
                           horizontal: 16, vertical: 10),
+                      ),
                     ),
                   ),
                 ),
-              ),
               const SizedBox(width: 6),
               ValueListenableBuilder<TextEditingValue>(
                 valueListenable: _inputController,
@@ -737,7 +821,7 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
       child: Row(
         children: [
           const Icon(Icons.edit_outlined, size: 16, color: AppColors.primary),
-          const SizedBox(width: 8),
+                const SizedBox(width: 8),
           Expanded(
             child: Text(
               _editingMessage?.text ?? '',
@@ -747,7 +831,7 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          GestureDetector(
+                GestureDetector(
             onTap: _cancelEdit,
             child: const Icon(Icons.close,
                 size: 18, color: AppColors.textTertiary),
@@ -773,9 +857,9 @@ class _ScrollToBottomButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        width: 36,
-        height: 36,
+                  child: Container(
+                    width: 36,
+                    height: 36,
         decoration: BoxDecoration(
           color: AppColors.surface,
           shape: BoxShape.circle,
@@ -797,9 +881,165 @@ class _ScrollToBottomButton extends StatelessWidget {
 // Message menu bottom sheet
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Swipe-to-reply wrapper (Telegram-style)
+// ---------------------------------------------------------------------------
+
+const double _kSwipeReplyThreshold = 72.0;
+const double _kSwipeReplyMax = 100.0;
+
+class _SwipeToReplyWrapper extends StatefulWidget {
+  final ChatMessage message;
+  final void Function(ChatMessage) onReply;
+  final Widget child;
+
+  const _SwipeToReplyWrapper({
+    required this.message,
+    required this.onReply,
+    required this.child,
+  });
+
+  @override
+  State<_SwipeToReplyWrapper> createState() => _SwipeToReplyWrapperState();
+}
+
+class _SwipeToReplyWrapperState extends State<_SwipeToReplyWrapper> {
+  double _offset = 0;
+
+  void _onDragUpdate(DragUpdateDetails d) {
+    if (widget.message.isDeleted) return;
+    // Prefer horizontal drag so list scroll still works for vertical swipes
+    if (d.delta.dx.abs() >= d.delta.dy.abs()) {
+      setState(() {
+        _offset = (_offset + d.delta.dx).clamp(0.0, _kSwipeReplyMax);
+      });
+    }
+  }
+
+  void _onDragEnd(DragEndDetails _) {
+    if (_offset >= _kSwipeReplyThreshold) {
+      widget.onReply(widget.message);
+    }
+    setState(() => _offset = 0);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      alignment: Alignment.centerLeft,
+      clipBehavior: Clip.none,
+      children: [
+        if (_offset > 4)
+          Positioned(
+            left: 14,
+            child: Opacity(
+              opacity: (_offset / _kSwipeReplyThreshold).clamp(0.0, 1.0),
+              child: Icon(
+                Icons.reply_rounded,
+                size: 22,
+                color: AppColors.primary,
+              ),
+            ),
+          ),
+        GestureDetector(
+          onHorizontalDragUpdate: _onDragUpdate,
+          onHorizontalDragEnd: _onDragEnd,
+          behavior: HitTestBehavior.opaque,
+          child: Transform.translate(
+            offset: Offset(_offset, 0),
+            child: widget.child,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Reply preview bar (above input)
+// ---------------------------------------------------------------------------
+
+class _ReplyPreview extends StatelessWidget {
+  final ChatMessage message;
+  final VoidCallback onClose;
+
+  const _ReplyPreview({required this.message, required this.onClose});
+
+  static String _previewText(ChatMessage m) {
+    if (m.text != null && m.text!.trim().isNotEmpty) return m.text!.trim();
+    if (m.imageUrl != null) return '📷 Фото';
+    return '—';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.surfaceTertiary,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(10, 10, 6, 10),
+                    decoration: const BoxDecoration(
+          border: Border(top: BorderSide(color: AppColors.border, width: 0.5)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 3,
+              height: 40,
+              margin: const EdgeInsets.only(right: 12),
+              decoration: BoxDecoration(
+                      color: AppColors.primary,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    message.senderName,
+                    style: AppTypography.labelSmall.copyWith(
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    _previewText(message),
+                    style: AppTypography.bodySmall.copyWith(
+                      color: AppColors.textSecondary,
+                      fontSize: 13,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+            IconButton(
+              icon: const Icon(Icons.close, size: 20, color: AppColors.textTertiary),
+              onPressed: onClose,
+              padding: const EdgeInsets.all(4),
+              constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Message menu bottom sheet
+// ---------------------------------------------------------------------------
+
 class _MessageMenuSheet extends StatelessWidget {
   final ChatMessage message;
   final bool isMe;
+  final VoidCallback? onReply;
   final VoidCallback? onCopy;
   final VoidCallback? onEdit;
   final VoidCallback? onDelete;
@@ -807,6 +1047,7 @@ class _MessageMenuSheet extends StatelessWidget {
   const _MessageMenuSheet({
     required this.message,
     required this.isMe,
+    this.onReply,
     this.onCopy,
     this.onEdit,
     this.onDelete,
@@ -849,6 +1090,16 @@ class _MessageMenuSheet extends StatelessWidget {
               ),
               const Divider(height: 1, color: AppColors.border),
             ],
+            if (onReply != null)
+              _MenuItem(
+                icon: Icons.reply_rounded,
+                label: 'Ответить',
+                color: AppColors.primary,
+                onTap: () {
+                  Navigator.pop(context);
+                  onReply!();
+                },
+              ),
             if (onCopy != null)
               _MenuItem(
                 icon: Icons.copy_outlined,
@@ -973,6 +1224,8 @@ class _DateDivider extends StatelessWidget {
 
 class _MediaGroupBubble extends StatelessWidget {
   final _GroupItem group;
+  final ChatMessage? replyToMessage;
+  final void Function(String messageId)? onReplyBlockTap;
   final bool isMe;
   final bool showAvatar;
   final void Function(ChatMessage) onLongPress;
@@ -985,6 +1238,8 @@ class _MediaGroupBubble extends StatelessWidget {
 
   const _MediaGroupBubble({
     required this.group,
+    this.replyToMessage,
+    this.onReplyBlockTap,
     required this.isMe,
     required this.showAvatar,
     required this.onLongPress,
@@ -992,6 +1247,59 @@ class _MediaGroupBubble extends StatelessWidget {
     this.onAvatarTap,
     this.avatarHeroTag,
   });
+
+  Widget _buildReplyBlock() {
+    final reply = replyToMessage;
+    if (reply == null || onReplyBlockTap == null) return const SizedBox.shrink();
+    String preview = reply.text != null && reply.text!.trim().isNotEmpty
+        ? reply.text!.trim()
+        : (reply.imageUrl != null ? '📷 Фото' : '—');
+    final lineColor = isMe ? AppColors.textOnPrimary.withValues(alpha: 0.6) : AppColors.primary.withValues(alpha: 0.85);
+    final nameColor = isMe ? AppColors.textOnPrimary.withValues(alpha: 0.85) : AppColors.primary.withValues(alpha: 0.9);
+    final textColor = isMe ? AppColors.textOnPrimary.withValues(alpha: 0.65) : AppColors.textSecondary.withValues(alpha: 0.9);
+    return GestureDetector(
+      onTap: () => onReplyBlockTap!(reply.id),
+      child: Opacity(
+        opacity: 0.92,
+        child: Container(
+          margin: const EdgeInsets.fromLTRB(12, 8, 12, 6),
+          padding: const EdgeInsets.only(left: 10, top: 3, bottom: 3, right: 4),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(6),
+            border: Border(
+              left: BorderSide(color: lineColor, width: 3),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                reply.senderName,
+                style: AppTypography.labelSmall.copyWith(
+                  color: nameColor,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 12,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 1),
+              Text(
+                preview,
+                style: AppTypography.bodySmall.copyWith(
+                  color: textColor,
+                  fontSize: 12,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1055,23 +1363,24 @@ class _MediaGroupBubble extends StatelessWidget {
       decoration: BoxDecoration(
         color: isMe ? AppColors.myMessage : AppColors.otherMessage,
         borderRadius: BorderRadius.circular(14),
-        boxShadow: const [
-          BoxShadow(
-            color: AppColors.shadow,
+                boxShadow: const [
+                  BoxShadow(
+                      color: AppColors.shadow,
             blurRadius: 3,
             offset: Offset(0, 1),
           ),
-        ],
-      ),
+                ],
+              ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(14),
-        child: Column(
+              child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
-          children: [
+                children: [
+            if (replyToMessage != null) _buildReplyBlock(),
             _buildGrid(),
             if (hasCaption)
-              Padding(
+                    Padding(
                 padding: const EdgeInsets.fromLTRB(12, 6, 12, 8),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1116,6 +1425,8 @@ class _MediaGroupBubble extends StatelessWidget {
         return Icon(Icons.check, size: 12, color: c);
       case MessageStatus.delivered:
         return Icon(Icons.done_all, size: 12, color: c);
+      case MessageStatus.read:
+        return Icon(Icons.done_all, size: 12, color: color ?? AppColors.primary);
     }
   }
 
@@ -1304,8 +1615,8 @@ class _MediaGroupBubble extends StatelessWidget {
                   strokeWidth: 2.5,
                   color: Colors.white,
                   backgroundColor: Colors.white24,
-                ),
-                Text(
+                    ),
+                  Text(
                   '${(p * 100).round()}%',
                   style: const TextStyle(
                     fontSize: 9,
@@ -1355,7 +1666,7 @@ class _MediaGroupBubble extends StatelessWidget {
             Container(
               color: Colors.black.withValues(alpha: 0.5),
               child: Center(
-                child: Text(
+                    child: Text(
                   '+$overlapCount',
                   style: const TextStyle(
                       color: Colors.white,
@@ -1403,6 +1714,8 @@ class _MediaGroupBubble extends StatelessWidget {
 
 class _MessageBubble extends StatelessWidget {
   final ChatMessage message;
+  final ChatMessage? replyToMessage;
+  final void Function(String messageId)? onReplyBlockTap;
   final bool isMe;
   final bool showAvatar;
   final bool isTail;
@@ -1414,6 +1727,8 @@ class _MessageBubble extends StatelessWidget {
 
   const _MessageBubble({
     required this.message,
+    this.replyToMessage,
+    this.onReplyBlockTap,
     required this.isMe,
     required this.showAvatar,
     required this.isTail,
@@ -1426,7 +1741,7 @@ class _MessageBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (message.isDeleted) return _buildDeleted();
+    if (message.isDeleted) return const SizedBox.shrink();
 
     return Padding(
       padding: EdgeInsets.only(
@@ -1493,6 +1808,59 @@ class _MessageBubble extends StatelessWidget {
     return _buildTextBubble();
   }
 
+  Widget _buildReplyBlock() {
+    final reply = replyToMessage;
+    if (reply == null || onReplyBlockTap == null) return const SizedBox.shrink();
+    String preview = reply.text != null && reply.text!.trim().isNotEmpty
+        ? reply.text!.trim()
+        : (reply.imageUrl != null ? '📷 Фото' : '—');
+    final lineColor = isMe ? AppColors.textOnPrimary.withValues(alpha: 0.6) : AppColors.primary.withValues(alpha: 0.85);
+    final nameColor = isMe ? AppColors.textOnPrimary.withValues(alpha: 0.85) : AppColors.primary.withValues(alpha: 0.9);
+    final textColor = isMe ? AppColors.textOnPrimary.withValues(alpha: 0.65) : AppColors.textSecondary.withValues(alpha: 0.9);
+    return GestureDetector(
+      onTap: () => onReplyBlockTap!(reply.id),
+      child: Opacity(
+        opacity: 0.92,
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 6),
+          padding: const EdgeInsets.only(left: 10, top: 3, bottom: 3, right: 4),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(6),
+            border: Border(
+              left: BorderSide(color: lineColor, width: 3),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                reply.senderName,
+                style: AppTypography.labelSmall.copyWith(
+                  color: nameColor,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 12,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 1),
+              Text(
+                preview,
+                style: AppTypography.bodySmall.copyWith(
+                  color: textColor,
+                  fontSize: 12,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildTextBubble() {
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 280),
@@ -1508,6 +1876,7 @@ class _MessageBubble extends StatelessWidget {
                 _senderName(),
                 const SizedBox(height: 2),
               ],
+              _buildReplyBlock(),
               _buildTextWithTime(message.text!),
             ],
           ),
@@ -1617,19 +1986,31 @@ class _MessageBubble extends StatelessWidget {
   }
 
   Widget _buildImageOnlyBubble() {
+    final hasReply = replyToMessage != null;
     return Container(
       constraints: const BoxConstraints(maxWidth: 260),
       decoration: _bubbleDecoration(noPadding: true),
       child: ClipRRect(
         borderRadius: _bubbleBorderRadius(),
-        child: Stack(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _wrappedImage(width: 260),
-            _uploadOverlay(),
-            Positioned(
-              bottom: 6,
-              right: 8,
-              child: _overlaidTime(),
+            if (hasReply)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+                child: _buildReplyBlock(),
+              ),
+            Stack(
+              children: [
+                _wrappedImage(width: 260),
+                _uploadOverlay(),
+                Positioned(
+                  bottom: 6,
+                  right: 8,
+                  child: _overlaidTime(),
+                ),
+              ],
             ),
           ],
         ),
@@ -1651,6 +2032,11 @@ class _MessageBubble extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
                 child: _senderName(),
+              ),
+            if (replyToMessage != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+                child: _buildReplyBlock(),
               ),
             Stack(
               children: [
@@ -1684,6 +2070,8 @@ class _MessageBubble extends StatelessWidget {
         return Icon(Icons.check, size: 12, color: c);
       case MessageStatus.delivered:
         return Icon(Icons.done_all, size: 12, color: c);
+      case MessageStatus.read:
+        return Icon(Icons.done_all, size: 12, color: color ?? AppColors.primary);
     }
   }
 
@@ -1693,9 +2081,9 @@ class _MessageBubble extends StatelessWidget {
       children: [
         if (message.isEdited)
           Text('изм. ',
-              style: AppTypography.labelSmall.copyWith(
-                  fontSize: 10,
-                  color: AppColors.textTertiary,
+                      style: AppTypography.labelSmall.copyWith(
+                        fontSize: 10,
+                        color: AppColors.textTertiary,
                   fontStyle: FontStyle.italic)),
         Text(message.timeFormatted,
             style: AppTypography.labelSmall
@@ -1766,37 +2154,6 @@ class _MessageBubble extends StatelessWidget {
     }
   }
 
-  Widget _buildDeleted() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        mainAxisAlignment:
-            isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
-        children: [
-          if (!isMe) const SizedBox(width: 40),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: AppColors.surfaceSecondary,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.block_outlined,
-                    size: 13, color: AppColors.textTertiary),
-                const SizedBox(width: 5),
-                Text('Сообщение удалено',
-                    style: AppTypography.labelSmall.copyWith(
-                        color: AppColors.textTertiary,
-                        fontStyle: FontStyle.italic)),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1986,10 +2343,10 @@ class _PhotoPreviewPageState extends State<_PhotoPreviewPage> {
                                 ),
                                 child: const Icon(Icons.close,
                                     color: Colors.white, size: 12),
-                              ),
-                            ),
-                          ),
-                        ],
+              ),
+            ),
+          ),
+        ],
                       ),
                     );
                   },

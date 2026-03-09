@@ -208,15 +208,18 @@ class ChatService {
   // REST: send / edit / delete
   // ---------------------------------------------------------------------------
 
-  Future<void> sendTextMessage(String text) async {
-    await _post('/messages', {'text': text});
+  Future<void> sendTextMessage(String text, {String? replyToMessageId}) async {
+    final body = <String, dynamic>{'text': text};
+    if (replyToMessageId != null) body['reply_to_message_id'] = replyToMessageId;
+    await _post('/messages', body);
   }
 
   Future<void> sendImageMessage(String imageUrl,
-      {String? caption, String? groupId}) async {
+      {String? caption, String? groupId, String? replyToMessageId}) async {
     final body = <String, dynamic>{'image_url': imageUrl};
     if (caption != null && caption.isNotEmpty) body['text'] = caption;
     if (groupId != null) body['group_id'] = groupId;
+    if (replyToMessageId != null) body['reply_to_message_id'] = replyToMessageId;
     await _post('/messages', body);
   }
 

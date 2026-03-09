@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_quill/flutter_quill.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../core/theme/app_theme.dart';
@@ -15,6 +17,13 @@ class AdminApp extends StatelessWidget {
     return MaterialApp(
       title: 'Donskih — Админка',
       debugShowCheckedModeBanner: false,
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+        FlutterQuillLocalizations.delegate,
+      ],
+      supportedLocales: const [Locale('ru'), Locale('en')],
       theme: AppTheme.light.copyWith(
         textTheme: GoogleFonts.montserratTextTheme(AppTheme.light.textTheme),
       ),

@@ -1,6 +1,10 @@
+import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'upload_picker.dart';
 
 const apiBase = 'https://donskih-cdn.ru/api/v1';
 const _keyAdminKey = 'admin_content_key';
@@ -284,6 +288,7 @@ class AdminApiService {
     String? adminKey, {
     required String filename,
     required List<int> bytes,
+    void Function(int sent, int total)? onUploadProgress,
   }) async {
     lastError = null;
     if (adminKey == null || adminKey.isEmpty) {
@@ -291,33 +296,47 @@ class AdminApiService {
       return null;
     }
 
+    if (bytes.isEmpty) {
+      lastError = 'Файл не прочитан';
+      return null;
+    }
+
     try {
-      final req = http.MultipartRequest(
-        'POST',
-        Uri.parse('$apiBase/admin/content/upload-video'),
-      );
-      req.headers['X-Admin-Key'] = adminKey;
-      req.headers['Accept'] = 'application/json';
-
-      if (bytes.isEmpty) {
-        lastError = 'Файл не прочитан';
-        return null;
-      }
-      req.files.add(
-        http.MultipartFile.fromBytes(
-          'file',
-          bytes,
+      if (kIsWeb) {
+        final result = await uploadFileWithProgress(
+          url: '$apiBase/admin/content/upload-video',
+          fieldName: 'file',
           filename: filename,
-        ),
+          bytes: bytes,
+          headers: {
+            'X-Admin-Key': adminKey,
+            'Accept': 'application/json',
+          },
+          onProgress: onUploadProgress,
+        );
+        return result;
+      }
+
+      final uri = Uri.parse('$apiBase/admin/content/upload-video');
+      final request = http.MultipartRequest('POST', uri);
+      request.headers['X-Admin-Key'] = adminKey;
+      request.headers['Accept'] = 'application/json';
+      request.files.add(
+        http.MultipartFile.fromBytes('file', bytes, filename: filename),
       );
 
-      final streamed = await req.send();
-      final resp = await http.Response.fromStream(streamed);
-      if (resp.statusCode != 200) {
-        lastError = _errorFromResponse(resp);
-        return null;
+      final client = http.Client();
+      try {
+        final streamed = await client.send(request);
+        final resp = await http.Response.fromStream(streamed);
+        if (resp.statusCode != 200) {
+          lastError = _errorFromResponse(resp);
+          return null;
+        }
+        return jsonDecode(resp.body) as Map<String, dynamic>;
+      } finally {
+        client.close();
       }
-      return jsonDecode(resp.body) as Map<String, dynamic>;
     } catch (e) {
       lastError = e.toString();
       return null;

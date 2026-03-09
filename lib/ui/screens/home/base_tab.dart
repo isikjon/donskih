@@ -7,6 +7,7 @@ import '../../../core/services/content_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
+import '../../widgets/rich_description_viewer.dart';
 import '../../components/app_bookmark.dart';
 import '../video/video_player_screen.dart';
 // ═══════════════════════════════════════════════════════════════
@@ -75,8 +76,11 @@ class _BaseTabState extends State<BaseTab> {
       return;
     }
     Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) =>
-          VideoPlayerScreen(videoUrl: url, title: sub?.title ?? item.title),
+      builder: (_) => VideoPlayerScreen(
+        videoUrl: url,
+        title: sub?.title ?? item.title,
+        description: item.subtitle,
+      ),
     ));
   }
 
@@ -213,7 +217,7 @@ class _BaseDateLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
+                return Padding(
       padding: const EdgeInsets.only(top: 8),
       child: Text(
         text,
@@ -296,31 +300,31 @@ class _BaseVideoCardState extends State<_BaseVideoCard>
         .toList();
 
     return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surface,
+            decoration: BoxDecoration(
+              color: AppColors.surface,
         borderRadius: BorderRadius.circular(AppSpacing.radiusLarge),
-        border: Border.all(color: AppColors.border, width: 0.5),
-        boxShadow: const [
-          BoxShadow(
+              border: Border.all(color: AppColors.border, width: 0.5),
+              boxShadow: const [
+                BoxShadow(
               color: AppColors.shadow, blurRadius: 10, offset: Offset(0, 2)),
         ],
       ),
-      child: Column(
-        children: [
+                  child: Column(
+                    children: [
           // Header
           Padding(
             padding: const EdgeInsets.all(12),
             child: Row(
-              children: [
+                children: [
                 // Thumbnail / play button
                 InkWell(
                   onTap: canPlay ? widget.onPlayMain : null,
                   borderRadius: BorderRadius.circular(10),
-                  child: Container(
+            child: Container(
                     width: 72,
                     height: 54,
-                    decoration: BoxDecoration(
-                      color: AppColors.surfaceSecondary,
+              decoration: BoxDecoration(
+                color: AppColors.surfaceSecondary,
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: ClipRRect(
@@ -329,11 +333,11 @@ class _BaseVideoCardState extends State<_BaseVideoCard>
                         if (thumbUrl != null)
                           CachedNetworkImage(
                             imageUrl: thumbUrl,
-                            fit: BoxFit.cover,
+                          fit: BoxFit.cover,
                             errorWidget: (_, __, ___) => const SizedBox(),
                             placeholder: (_, __) =>
                                 Container(color: AppColors.surfaceSecondary),
-                          ),
+                        ),
                         Container(
                             color: Colors.black.withValues(
                                 alpha: thumbUrl == null ? 0 : 0.2)),
@@ -351,32 +355,33 @@ class _BaseVideoCardState extends State<_BaseVideoCard>
                         ),
                       ]),
                     ),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
+                  const SizedBox(width: 12),
+                  Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
                       Text(widget.item.title,
-                          style: AppTypography.titleSmall,
+                            style: AppTypography.titleSmall,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis),
-                      if ((widget.item.subtitle ?? '').isNotEmpty) ...[
-                        const SizedBox(height: 2),
-                        Text(widget.item.subtitle!,
+                      if ((ContentItemDto.subtitleToPlainText(widget.item.subtitle) ?? '').isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                        Text(ContentItemDto.subtitleToPlainText(widget.item.subtitle)!,
                             style: AppTypography.bodySmall,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis),
                       ],
-                    ],
-                  ),
-                ),
+                        ],
+                      ),
+                    ),
                 AnimatedBookmark(
                     isBookmarked: widget.isBookmarked,
                     onToggle: widget.onBookmark,
                     size: 20),
-                if (subs.isNotEmpty)
+                if (subs.isNotEmpty ||
+                    (ContentItemDto.subtitleToPlainText(widget.item.subtitle) ?? '').trim().isNotEmpty)
                   IconButton(
                     onPressed: _toggle,
                     icon: Icon(
@@ -385,84 +390,252 @@ class _BaseVideoCardState extends State<_BaseVideoCard>
                       size: 22,
                     ),
                   ),
-              ],
-            ),
-          ),
-          // Sub-lessons
-          if (subs.isNotEmpty)
-            SizeTransition(
-              sizeFactor: _anim,
-              child: Column(
-                children: [
-                  const Divider(height: 1),
-                  Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Column(
-                      children: subs.map((sub) {
-                        final canPlaySub =
-                            (sub.url?.trim().isNotEmpty ?? false) || canPlay;
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 10),
-                          child: InkWell(
-                            onTap:
-                                canPlaySub ? () => widget.onPlaySub(sub) : null,
-                            borderRadius: BorderRadius.circular(8),
-                            child: Row(
-                              children: [
-                                Container(
-                                  width: 56,
-                                  height: 42,
-                                  decoration: BoxDecoration(
-                                    color: AppColors.surfaceSecondary,
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Center(
-                                    child: Icon(
-                                      Icons.play_arrow_rounded,
-                                      color: canPlaySub
-                                          ? AppColors.primary
-                                          : AppColors.textTertiary
-                                              .withValues(alpha: 0.45),
-                                      size: 22,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Text(sub.title,
-                                          style: AppTypography.bodyMedium),
-                                      if ((sub.description ?? '').isNotEmpty)
-                                        Text(sub.description!,
-                                            style: AppTypography.bodySmall
-                                                .copyWith(
-                                                    color: AppColors
-                                                        .textSecondary),
-                                            maxLines: 2,
-                                            overflow: TextOverflow.ellipsis),
-                                    ],
-                                  ),
-                                ),
-                                if (sub.duration.isNotEmpty)
-                                  Text(sub.duration,
-                                      style: AppTypography.labelSmall),
-                              ],
-                            ),
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                  ),
                 ],
               ),
             ),
-        ],
+          // Expanded: full description + sub-lessons carousel
+          SizeTransition(
+            sizeFactor: _anim,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Divider(height: 1),
+                if ((ContentItemDto.subtitleToPlainText(widget.item.subtitle) ?? '').trim().isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+                    child: RichDescriptionViewer(
+                      subtitle: widget.item.subtitle,
+                      textStyle: AppTypography.bodySmall.copyWith(
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ),
+                if (subs.isNotEmpty)
+                  _BaseSubLessonCarousel(
+                    subLessons: subs,
+                    parentVideoUrl: widget.item.url,
+                    canPlayParent: canPlay,
+                    onPlaySubLesson: widget.onPlaySub,
+                  )
+                else
+                  const SizedBox(height: 12),
+              ],
+            ),
+          ),
+      ],
       ),
     );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Sub-lesson carousel — horizontal PageView with thumbnails + descriptions
+// ---------------------------------------------------------------------------
+
+class _BaseSubLessonCarousel extends StatefulWidget {
+  final List<_BaseSubLesson> subLessons;
+  final String? parentVideoUrl;
+  final bool canPlayParent;
+  final ValueChanged<_BaseSubLesson> onPlaySubLesson;
+
+  const _BaseSubLessonCarousel({
+    required this.subLessons,
+    this.parentVideoUrl,
+    required this.canPlayParent,
+    required this.onPlaySubLesson,
+  });
+
+  @override
+  State<_BaseSubLessonCarousel> createState() => _BaseSubLessonCarouselState();
+}
+
+class _BaseSubLessonCarouselState extends State<_BaseSubLessonCarousel> {
+  final PageController _pageController = PageController();
+  int _currentPage = 0;
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  String? _thumbUrl(String? videoUrl) {
+    if (videoUrl == null || videoUrl.trim().isEmpty) return null;
+    final uri = Uri.tryParse(videoUrl.trim());
+    if (uri == null || !uri.path.endsWith('/index.m3u8')) return null;
+    return uri
+        .replace(
+            path: uri.path
+                .replaceFirst(RegExp(r'/index\.m3u8$'), '/thumb.jpg'))
+        .toString();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hasDescription = widget.subLessons
+        .any((s) => s.description != null && s.description!.trim().isNotEmpty);
+
+    return LayoutBuilder(builder: (context, constraints) {
+      final thumbWidth = constraints.maxWidth - 24;
+      final thumbHeight = thumbWidth * 16 / 9;
+      final carouselHeight =
+          44 + thumbHeight + (hasDescription ? 130 : 10);
+
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            height: carouselHeight,
+            child: PageView.builder(
+              controller: _pageController,
+              itemCount: widget.subLessons.length,
+              onPageChanged: (i) => setState(() => _currentPage = i),
+              itemBuilder: (context, index) {
+                final sub = widget.subLessons[index];
+                final videoUrl = (sub.url?.trim().isNotEmpty == true)
+                    ? sub.url
+                    : widget.parentVideoUrl;
+                final thumbUrl = _thumbUrl(videoUrl);
+                final canPlay = (sub.url?.trim().isNotEmpty ?? false) ||
+                    widget.canPlayParent;
+
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SizedBox(height: 12),
+                      Text(sub.title,
+                          style: AppTypography.titleSmall
+                              .copyWith(fontWeight: FontWeight.w600),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis),
+                      const SizedBox(height: 8),
+                      GestureDetector(
+                        onTap: canPlay
+                            ? () => widget.onPlaySubLesson(sub)
+                            : null,
+                        child: AspectRatio(
+                          aspectRatio: 9 / 16,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: AppColors.surfaceSecondary,
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(14),
+                              child: Stack(
+                                fit: StackFit.expand,
+                                children: [
+                                  if (thumbUrl != null)
+                                    CachedNetworkImage(
+                                      imageUrl: thumbUrl,
+                                      fit: BoxFit.cover,
+                                      placeholder: (_, __) => Container(
+                                          color: AppColors.surfaceSecondary),
+                                      errorWidget: (_, __, ___) =>
+                                          const SizedBox(),
+                                    ),
+                                  Container(
+                                    color: Colors.black.withValues(
+                                        alpha: thumbUrl != null ? 0.15 : 0),
+                                  ),
+                                  Center(
+                                    child: Container(
+                                      width: 56,
+                                      height: 56,
+                                      decoration: BoxDecoration(
+                                        color: Colors.white
+                                            .withValues(alpha: 0.9),
+                                        shape: BoxShape.circle,
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.black
+                                                .withValues(alpha: 0.15),
+                                            blurRadius: 12,
+                                          ),
+                                        ],
+                                      ),
+                                      child: Icon(
+                                        Icons.play_arrow_rounded,
+                                        color: canPlay
+                                            ? AppColors.primary
+                                            : AppColors.textTertiary,
+                                        size: 32,
+                                      ),
+                                    ),
+                                  ),
+                                  if (sub.duration.isNotEmpty)
+                                    Positioned(
+                                      bottom: 10,
+                                      right: 10,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 10, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: Colors.black54,
+                                          borderRadius:
+                                              BorderRadius.circular(8),
+                                        ),
+                                        child: Text(
+                                          sub.duration,
+                                          style: AppTypography.labelSmall
+                                              .copyWith(color: Colors.white),
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      if (sub.description != null &&
+                          sub.description!.trim().isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        Expanded(
+                          child: SingleChildScrollView(
+                            child: RichDescriptionViewer(
+                              subtitle: sub.description!,
+                              textStyle: AppTypography.bodySmall
+                                  .copyWith(color: AppColors.textSecondary),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        if (widget.subLessons.length > 1)
+          Padding(
+            padding: const EdgeInsets.only(top: 4, bottom: 12),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children:
+                  List.generate(widget.subLessons.length, (i) {
+                final isActive = i == _currentPage;
+                return AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  width: isActive ? 20 : 8,
+                  height: 8,
+                  margin: const EdgeInsets.symmetric(horizontal: 3),
+                  decoration: BoxDecoration(
+                    color:
+                        isActive ? AppColors.primary : AppColors.border,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                );
+              }),
+            ),
+          ),
+        if (widget.subLessons.length <= 1) const SizedBox(height: 12),
+        ],
+      );
+    });
   }
 }
 
@@ -502,26 +675,26 @@ class _BaseChecklistCard extends StatelessWidget {
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
+      decoration: BoxDecoration(
+        color: AppColors.surface,
           borderRadius: BorderRadius.circular(AppSpacing.radiusLarge),
-          border: Border.all(color: AppColors.border, width: 0.5),
-          boxShadow: const [
-            BoxShadow(
+        border: Border.all(color: AppColors.border, width: 0.5),
+        boxShadow: const [
+          BoxShadow(
                 color: AppColors.shadow,
                 blurRadius: 10,
                 offset: Offset(0, 2)),
-          ],
-        ),
-        child: Row(
-          children: [
-            Container(
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
               width: 72,
               height: 54,
-              decoration: BoxDecoration(
-                color: AppColors.primaryLight,
-                borderRadius: BorderRadius.circular(10),
-              ),
+            decoration: BoxDecoration(
+              color: AppColors.primaryLight,
+              borderRadius: BorderRadius.circular(10),
+            ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(10),
                 child: Stack(fit: StackFit.expand, children: [
@@ -542,29 +715,29 @@ class _BaseChecklistCard extends StatelessWidget {
                   ),
                 ]),
               ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
                   Text(item.title,
                       style: AppTypography.titleSmall,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis),
-                  if ((item.subtitle ?? '').isNotEmpty) ...[
-                    const SizedBox(height: 2),
-                    Text(item.subtitle!,
+                  if ((ContentItemDto.subtitleToPlainText(item.subtitle) ?? '').isNotEmpty) ...[
+                const SizedBox(height: 2),
+                    Text(ContentItemDto.subtitleToPlainText(item.subtitle)!,
                         style: AppTypography.bodySmall,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis),
                   ],
-                ],
-              ),
+              ],
             ),
+          ),
             AnimatedBookmark(
                 isBookmarked: isBookmarked, onToggle: onBookmark, size: 20),
-          ],
+        ],
         ),
       ),
     );

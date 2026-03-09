@@ -95,6 +95,7 @@ def _serialize(msg: ChatMessage) -> dict:
         "text": msg.text if not msg.is_deleted else None,
         "image_url": msg.image_url if not msg.is_deleted else None,
         "group_id": msg.group_id,
+        "reply_to_message_id": str(msg.reply_to_message_id) if msg.reply_to_message_id else None,
         "is_edited": msg.is_edited,
         "is_deleted": msg.is_deleted,
         "created_at": msg.created_at.isoformat(),
@@ -179,11 +180,19 @@ async def send_message(
     if not req.text and not req.image_url:
         raise HTTPException(status_code=400, detail="Either text or image_url is required")
 
+    reply_to_uuid = None
+    if req.reply_to_message_id:
+        try:
+            reply_to_uuid = uuid.UUID(req.reply_to_message_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid reply_to_message_id")
+
     msg = ChatMessage(
         user_id=current_user.id,
         text=req.text.strip() if req.text else None,
         image_url=req.image_url,
         group_id=req.group_id,
+        reply_to_message_id=reply_to_uuid,
     )
     db.add(msg)
     await db.flush()

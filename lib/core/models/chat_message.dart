@@ -1,4 +1,4 @@
-enum MessageStatus { sending, sent, delivered }
+enum MessageStatus { sending, sent, delivered, read }
 
 class ChatMessage {
   final String id;
@@ -8,6 +8,7 @@ class ChatMessage {
   final String? text;
   final String? imageUrl;
   final String? groupId;
+  final String? replyToMessageId;
   final bool isDeleted;
   final bool isEdited;
   final DateTime createdAt;
@@ -22,6 +23,7 @@ class ChatMessage {
     this.text,
     this.imageUrl,
     this.groupId,
+    this.replyToMessageId,
     required this.isDeleted,
     required this.isEdited,
     required this.createdAt,
@@ -30,6 +32,7 @@ class ChatMessage {
   });
 
   factory ChatMessage.fromJson(Map<String, dynamic> json) {
+    final rawReply = json['reply_to_message_id'];
     return ChatMessage(
       id: json['id'] as String,
       userId: json['user_id'] as String,
@@ -38,6 +41,7 @@ class ChatMessage {
       text: json['text'] as String?,
       imageUrl: json['image_url'] as String?,
       groupId: json['group_id'] as String?,
+      replyToMessageId: rawReply != null ? rawReply.toString() : null,
       isDeleted: json['is_deleted'] as bool? ?? false,
       isEdited: json['is_edited'] as bool? ?? false,
       createdAt: DateTime.parse(json['created_at'] as String).toLocal(),
@@ -52,6 +56,7 @@ class ChatMessage {
     String? text,
     String? imageUrl,
     String? groupId,
+    String? replyToMessageId,
     bool? isDeleted,
     bool? isEdited,
     DateTime? createdAt,
@@ -69,6 +74,7 @@ class ChatMessage {
       text: clearText ? null : (text ?? this.text),
       imageUrl: clearImageUrl ? null : (imageUrl ?? this.imageUrl),
       groupId: groupId ?? this.groupId,
+      replyToMessageId: replyToMessageId ?? this.replyToMessageId,
       isDeleted: isDeleted ?? this.isDeleted,
       isEdited: isEdited ?? this.isEdited,
       createdAt: createdAt ?? this.createdAt,

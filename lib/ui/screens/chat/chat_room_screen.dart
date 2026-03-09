@@ -218,7 +218,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
               stream: _chat.stream,
               initialData: _chat.messages,
               builder: (context, snapshot) {
-                final msgs = snapshot.data ?? [];
+                final msgs = (snapshot.data ?? []).where((m) => !m.isDeleted).toList();
                 if (msgs.isEmpty) {
                   return const Center(
                     child: Text('Нет сообщений', style: TextStyle(color: AppColors.textTertiary)),
@@ -397,41 +397,7 @@ class _RoomBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (message.isDeleted) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 2),
-        child: Row(
-          mainAxisAlignment:
-              isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
-          children: [
-            if (!isMe) const SizedBox(width: 40),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-              decoration: BoxDecoration(
-                color: AppColors.surfaceSecondary,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.border, width: 0.5),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.block_outlined,
-                      size: 14, color: AppColors.textTertiary),
-                  const SizedBox(width: 6),
-                  Text(
-                    'Сообщение удалено',
-                    style: AppTypography.labelSmall.copyWith(
-                      color: AppColors.textTertiary,
-                      fontStyle: FontStyle.italic,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      );
-    }
+    if (message.isDeleted) return const SizedBox.shrink();
 
     return Padding(
       padding: EdgeInsets.only(top: showAvatar ? 10 : 2, bottom: 2),

@@ -12,6 +12,7 @@ class ChatMessageOut(BaseModel):
     text: str | None
     image_url: str | None
     group_id: str | None
+    reply_to_message_id: str | None = None
     is_edited: bool
     is_deleted: bool
     created_at: str
@@ -23,6 +24,7 @@ class SendMessageRequest(BaseModel):
     text: str | None = None
     image_url: str | None = None
     group_id: str | None = None
+    reply_to_message_id: str | None = None
 
 
 class EditMessageRequest(BaseModel):

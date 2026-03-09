@@ -9,6 +9,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../components/app_bookmark.dart';
+import '../../widgets/rich_description_viewer.dart';
 import '../video/video_player_screen.dart';
 
 class ContentTab extends StatefulWidget {
@@ -83,6 +84,7 @@ class _ContentTabState extends State<ContentTab> {
         builder: (_) => VideoPlayerScreen(
           videoUrl: url,
           title: sub?.title ?? item.title,
+          description: item.subtitle,
         ),
       ),
     );
@@ -196,10 +198,11 @@ class _ContentTabState extends State<ContentTab> {
         if (item.isVideo) {
           list.add(
             _ExpandableLessonCard(
+              subtitle: item.subtitle,
               key: _keyFor(item.id),
               id: item.id,
               title: item.title,
-              description: item.subtitle ?? '',
+              description: ContentItemDto.subtitleToPlainText(item.subtitle) ?? '',
               videoUrl: item.url,
               isBookmarked: _isBookmarked(item.id),
               onBookmark: (v) => _toggleBookmark(item.id, v),
@@ -221,7 +224,7 @@ class _ContentTabState extends State<ContentTab> {
             _ChecklistCard(
               key: _keyFor(item.id),
               title: item.title,
-              description: item.subtitle ?? '',
+              description: ContentItemDto.subtitleToPlainText(item.subtitle) ?? '',
               fileUrl: item.url,
               isBookmarked: _isBookmarked(item.id),
               onBookmark: (v) => _toggleBookmark(item.id, v),
@@ -499,6 +502,7 @@ class _ExpandableLessonCard extends StatefulWidget {
   final String id;
   final String title;
   final String description;
+  final String? subtitle;
   final String? videoUrl;
   final bool isBookmarked;
   final ValueChanged<bool> onBookmark;
@@ -512,6 +516,7 @@ class _ExpandableLessonCard extends StatefulWidget {
     required this.id,
     required this.title,
     required this.description,
+    this.subtitle,
     required this.videoUrl,
     required this.isBookmarked,
     required this.onBookmark,
@@ -667,81 +672,246 @@ class _ExpandableLessonCardState extends State<_ExpandableLessonCard>
           SizeTransition(
             sizeFactor: _animation,
             child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const Divider(height: 1),
-                Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    children: widget.subLessons.map((sub) {
-                      // Sub-video is playable if it has its own URL OR parent has URL
-                      final canPlaySub =
-                          (sub.url?.trim().isNotEmpty ?? false) || widget.canPlay;
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 10),
-                        child: InkWell(
-                          onTap: canPlaySub
-                              ? () => widget.onPlaySubLesson(sub)
-                              : null,
-                          borderRadius: BorderRadius.circular(8),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              Container(
-                                width: 56,
-                                height: 42,
-                                decoration: BoxDecoration(
-                                  color: AppColors.surfaceSecondary,
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Center(
-                                  child: Icon(
-                                    Icons.play_arrow_rounded,
-                                    color: canPlaySub
-                                        ? AppColors.primary
-                                        : AppColors.textTertiary
-                                            .withValues(alpha: 0.45),
-                                    size: 22,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text(sub.title,
-                                        style: AppTypography.bodyMedium),
-                                    if (sub.description != null &&
-                                        sub.description!.isNotEmpty) ...[
-                                      const SizedBox(height: 2),
-                                      _LinkedText(
-                                        text: sub.description!,
-                                        style: AppTypography.bodySmall.copyWith(
-                                            color: AppColors.textSecondary),
-                                        maxLines: 3,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                              ),
-                              if (sub.duration.isNotEmpty)
-                                Text(sub.duration,
-                                    style: AppTypography.labelSmall),
-                            ],
-                          ),
-                        ),
-                      );
-                    }).toList(),
+                if ((widget.subtitle ?? widget.description).trim().isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+                    child: RichDescriptionViewer(
+                      subtitle: widget.subtitle ?? widget.description,
+                      textStyle: AppTypography.bodySmall.copyWith(
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
                   ),
-                ),
+                if (widget.subLessons.isNotEmpty)
+                  _SubLessonCarousel(
+                    subLessons: widget.subLessons,
+                    parentVideoUrl: widget.videoUrl,
+                    canPlayParent: widget.canPlay,
+                    onPlaySubLesson: widget.onPlaySubLesson,
+                  )
+                else
+                  const SizedBox(height: 12),
               ],
             ),
           ),
         ],
       ),
     );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Sub-lesson carousel — horizontal PageView with thumbnails + descriptions
+// ---------------------------------------------------------------------------
+
+class _SubLessonCarousel extends StatefulWidget {
+  final List<_SubLessonData> subLessons;
+  final String? parentVideoUrl;
+  final bool canPlayParent;
+  final ValueChanged<_SubLessonData> onPlaySubLesson;
+
+  const _SubLessonCarousel({
+    required this.subLessons,
+    this.parentVideoUrl,
+    required this.canPlayParent,
+    required this.onPlaySubLesson,
+  });
+
+  @override
+  State<_SubLessonCarousel> createState() => _SubLessonCarouselState();
+}
+
+class _SubLessonCarouselState extends State<_SubLessonCarousel> {
+  final PageController _pageController = PageController();
+  int _currentPage = 0;
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  String? _thumbUrl(String? videoUrl) {
+    if (videoUrl == null || videoUrl.trim().isEmpty) return null;
+    final uri = Uri.tryParse(videoUrl.trim());
+    if (uri == null || !uri.path.endsWith('/index.m3u8')) return null;
+    return uri
+        .replace(
+            path: uri.path
+                .replaceFirst(RegExp(r'/index\.m3u8$'), '/thumb.jpg'))
+        .toString();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hasDescription = widget.subLessons
+        .any((s) => s.description != null && s.description!.trim().isNotEmpty);
+
+    return LayoutBuilder(builder: (context, constraints) {
+      final thumbWidth = constraints.maxWidth - 24;
+      final thumbHeight = thumbWidth * 16 / 9;
+      final carouselHeight =
+          44 + thumbHeight + (hasDescription ? 130 : 10);
+
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            height: carouselHeight,
+            child: PageView.builder(
+              controller: _pageController,
+              itemCount: widget.subLessons.length,
+              onPageChanged: (i) => setState(() => _currentPage = i),
+              itemBuilder: (context, index) {
+                final sub = widget.subLessons[index];
+                final videoUrl = (sub.url?.trim().isNotEmpty == true)
+                    ? sub.url
+                    : widget.parentVideoUrl;
+                final thumbUrl = _thumbUrl(videoUrl);
+                final canPlay = (sub.url?.trim().isNotEmpty ?? false) ||
+                    widget.canPlayParent;
+
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SizedBox(height: 12),
+                      Text(sub.title,
+                          style: AppTypography.titleSmall
+                              .copyWith(fontWeight: FontWeight.w600),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis),
+                      const SizedBox(height: 8),
+                      GestureDetector(
+                        onTap: canPlay
+                            ? () => widget.onPlaySubLesson(sub)
+                            : null,
+                        child: AspectRatio(
+                          aspectRatio: 9 / 16,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: AppColors.surfaceSecondary,
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(14),
+                              child: Stack(
+                                fit: StackFit.expand,
+                                children: [
+                                  if (thumbUrl != null)
+                                    CachedNetworkImage(
+                                      imageUrl: thumbUrl,
+                                      fit: BoxFit.cover,
+                                      placeholder: (_, __) => Container(
+                                          color: AppColors.surfaceSecondary),
+                                      errorWidget: (_, __, ___) =>
+                                          const SizedBox(),
+                                    ),
+                                  Container(
+                                    color: Colors.black.withValues(
+                                        alpha: thumbUrl != null ? 0.15 : 0),
+                                  ),
+                                  Center(
+                                    child: Container(
+                                      width: 56,
+                                      height: 56,
+                                      decoration: BoxDecoration(
+                                        color: Colors.white
+                                            .withValues(alpha: 0.9),
+                                        shape: BoxShape.circle,
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.black
+                                                .withValues(alpha: 0.15),
+                                            blurRadius: 12,
+                                          ),
+                                        ],
+                                      ),
+                                      child: Icon(
+                                        Icons.play_arrow_rounded,
+                                        color: canPlay
+                                            ? AppColors.primary
+                                            : AppColors.textTertiary,
+                                        size: 32,
+                                      ),
+                                    ),
+                                  ),
+                                  if (sub.duration.isNotEmpty)
+                                    Positioned(
+                                      bottom: 10,
+                                      right: 10,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 10, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: Colors.black54,
+                                          borderRadius:
+                                              BorderRadius.circular(8),
+                                        ),
+                                        child: Text(
+                                          sub.duration,
+                                          style: AppTypography.labelSmall
+                                              .copyWith(color: Colors.white),
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      if (sub.description != null &&
+                          sub.description!.trim().isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        Expanded(
+                          child: SingleChildScrollView(
+                            child: RichDescriptionViewer(
+                              subtitle: sub.description!,
+                              textStyle: AppTypography.bodySmall
+                                  .copyWith(color: AppColors.textSecondary),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        // Dots indicator
+        if (widget.subLessons.length > 1)
+          Padding(
+            padding: const EdgeInsets.only(top: 4, bottom: 12),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children:
+                  List.generate(widget.subLessons.length, (i) {
+                final isActive = i == _currentPage;
+                return AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  width: isActive ? 20 : 8,
+                  height: 8,
+                  margin: const EdgeInsets.symmetric(horizontal: 3),
+                  decoration: BoxDecoration(
+                    color:
+                        isActive ? AppColors.primary : AppColors.border,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                );
+              }),
+            ),
+          ),
+        if (widget.subLessons.length <= 1) const SizedBox(height: 12),
+        ],
+      );
+    });
   }
 }
 

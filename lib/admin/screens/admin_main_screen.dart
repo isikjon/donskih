@@ -51,50 +51,67 @@ class _AdminMainScreenState extends State<AdminMainScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: AppColors.surface,
-        elevation: 0,
-        titleSpacing: isNarrow ? null : 0,
-        title: Row(
-          children: [
-            Container(
-              width: 30,
-              height: 30,
-              decoration: const BoxDecoration(
-                color: AppColors.primary,
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.admin_panel_settings, color: Colors.white, size: 18),
+      appBar: PreferredSize(
+        preferredSize: Size.fromHeight(isNarrow ? 56 + 48 : 56),
+        child: Container(
+          color: AppColors.surface,
+          child: SafeArea(
+            bottom: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                  child: Center(
+                    child: Container(
+                      constraints: const BoxConstraints(maxWidth: 900),
+                      width: double.infinity,
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 30,
+                            height: 30,
+                            decoration: const BoxDecoration(
+                              color: AppColors.primary,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.admin_panel_settings, color: Colors.white, size: 18),
+                          ),
+                          const SizedBox(width: 10),
+                          Text('Donskih Admin', style: AppTypography.titleSmall.copyWith(color: AppColors.primary)),
+                          const Spacer(),
+                          if (!isNarrow) _buildDesktopNav(),
+                          IconButton(
+                            icon: const Icon(Icons.logout_rounded, color: AppColors.textSecondary),
+                            tooltip: 'Выйти',
+                            onPressed: _logout,
+                          ),
+                          const SizedBox(width: 8),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                if (isNarrow) _buildMobileNav(),
+              ],
             ),
-            const SizedBox(width: 10),
-            Text('Donskih Admin', style: AppTypography.titleSmall.copyWith(color: AppColors.primary)),
-            const Spacer(),
-            if (!isNarrow) _buildDesktopNav(),
-          ],
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout_rounded, color: AppColors.textSecondary),
-            tooltip: 'Выйти',
-            onPressed: _logout,
           ),
-          const SizedBox(width: 8),
-        ],
-        bottom: isNarrow
-            ? PreferredSize(
-                preferredSize: const Size.fromHeight(48),
-                child: _buildMobileNav(),
-              )
-            : null,
+        ),
       ),
-      body: IndexedStack(
-        index: _selectedIndex,
-        children: [
-          AdminContentListBody(adminKey: _adminKey, section: 'main'),
-          AdminContentListBody(adminKey: _adminKey, section: 'base'),
-          AdminUsersScreen(adminKey: _adminKey),
-          AdminChatModerationScreen(adminKey: _adminKey),
-        ],
+      body: Center(
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 900),
+          width: double.infinity,
+          child: IndexedStack(
+            index: _selectedIndex,
+            children: [
+              AdminContentListBody(adminKey: _adminKey, section: 'main'),
+              AdminContentListBody(adminKey: _adminKey, section: 'base'),
+              AdminUsersScreen(adminKey: _adminKey),
+              AdminChatModerationScreen(adminKey: _adminKey),
+            ],
+          ),
+        ),
       ),
     );
   }

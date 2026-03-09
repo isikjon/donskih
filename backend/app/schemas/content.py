@@ -17,7 +17,7 @@ class ContentSubItemOut(BaseModel):
 
 class ContentSubItemIn(BaseModel):
     title: str = Field(..., max_length=500)
-    description: str | None = Field(None, max_length=2000)
+    description: str | None = Field(None, max_length=10000)
     url: str | None = Field(None, max_length=2048)
     duration: str | None = Field(None, max_length=20)
     sort_order: int = 0
@@ -42,7 +42,7 @@ class ContentItemCreate(BaseModel):
     section: str = Field("main", pattern="^(main|base)$")
     display_date: date
     title: str = Field(..., max_length=500)
-    subtitle: str | None = Field(None, max_length=1000)
+    subtitle: str | None = Field(None, max_length=10000)
     sort_order: int = 0
     url: str | None = Field(None, max_length=2048)
     sub_items: list[ContentSubItemIn] = []
@@ -52,7 +52,7 @@ class ContentItemUpdate(BaseModel):
     section: str | None = Field(None, pattern="^(main|base)$")
     display_date: date | None = None
     title: str | None = Field(None, max_length=500)
-    subtitle: str | None = Field(None, max_length=1000)
+    subtitle: str | None = Field(None, max_length=10000)
     sort_order: int | None = None
     url: str | None = Field(None, max_length=2048)
     sub_items: list[ContentSubItemIn] | None = None

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/models/content_item.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
@@ -196,8 +197,12 @@ class _AdminContentListBodyState extends State<AdminContentListBody> {
               overflow: TextOverflow.ellipsis,
             ),
             subtitle: item['subtitle'] != null
-                ? Text(item['subtitle'] as String,
-                    style: AppTypography.bodySmall, maxLines: 1, overflow: TextOverflow.ellipsis)
+                ? Text(
+                    ContentItemDto.subtitleToPlainText(item['subtitle'] as String) ?? '',
+                    style: AppTypography.bodySmall,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  )
                 : null,
             trailing: Row(
               mainAxisSize: MainAxisSize.min,

@@ -32,15 +32,41 @@ async def get_pool() -> aiomysql.Pool:
     return _pool
 
 
+async def _get_bot_user_columns() -> str:
+    """Detect available columns in bot users table, cache result."""
+    global _user_columns_cache
+    if _user_columns_cache is not None:
+        return _user_columns_cache
+
+    base = "user_id, username, role, sub_type, auto, test, reg_date, end_date, sub_date, notification, sub_is_rus"
+    pool = await get_pool()
+    try:
+        async with pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("SHOW COLUMNS FROM users")
+                rows = await cur.fetchall()
+                col_names = {r[0] for r in rows}
+                extras = []
+                for candidate in ("instagram", "inst", "insta_username", "ig_username", "insta"):
+                    if candidate in col_names:
+                        extras.append(candidate)
+                        break
+                _user_columns_cache = base + (", " + ", ".join(extras) if extras else "")
+    except Exception:
+        _user_columns_cache = base
+    return _user_columns_cache
+
+_user_columns_cache: str | None = None
+
+
 async def get_bot_user_by_telegram_id(telegram_user_id: int) -> dict | None:
     """Find a user in the bot DB by their Telegram user_id."""
+    cols = await _get_bot_user_columns()
     pool = await get_pool()
     async with pool.acquire() as conn:
         async with conn.cursor(aiomysql.DictCursor) as cur:
             await cur.execute(
-                "SELECT user_id, username, role, sub_type, auto, test, "
-                "reg_date, end_date, sub_date, notification, sub_is_rus "
-                "FROM users WHERE user_id = %s LIMIT 1",
+                f"SELECT {cols} FROM users WHERE user_id = %s LIMIT 1",
                 (str(telegram_user_id),),
             )
             return await cur.fetchone()
@@ -49,13 +75,12 @@ async def get_bot_user_by_telegram_id(telegram_user_id: int) -> dict | None:
 async def get_bot_user_by_username(username: str) -> dict | None:
     """Find a user in the bot DB by their Telegram username."""
     clean = username.lstrip("@")
+    cols = await _get_bot_user_columns()
     pool = await get_pool()
     async with pool.acquire() as conn:
         async with conn.cursor(aiomysql.DictCursor) as cur:
             await cur.execute(
-                "SELECT user_id, username, role, sub_type, auto, test, "
-                "reg_date, end_date, sub_date, notification, sub_is_rus "
-                "FROM users WHERE username = %s LIMIT 1",
+                f"SELECT {cols} FROM users WHERE username = %s LIMIT 1",
                 (clean,),
             )
             return await cur.fetchone()
@@ -99,6 +124,12 @@ def parse_subscription(bot_user: dict) -> dict:
         except (ValueError, AttributeError):
             pass
 
+    instagram = None
+    for key in ("instagram", "inst", "insta_username", "ig_username", "insta"):
+        if key in bot_user and bot_user[key]:
+            instagram = str(bot_user[key]).strip()
+            break
+
     return {
         "is_active": is_active,
         "sub_type": sub_type,
@@ -108,4 +139,5 @@ def parse_subscription(bot_user: dict) -> dict:
         "is_test": bool(bot_user.get("test")),
         "role": bot_user.get("role", "user"),
         "bot_username": bot_user.get("username"),
+        "instagram": instagram,
     }

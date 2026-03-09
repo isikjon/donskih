@@ -21,6 +21,12 @@ class ChatMessage(Base):
     text: Mapped[str | None] = mapped_column(String(4096), nullable=True)
     image_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     group_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    reply_to_message_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("chat_messages.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     is_edited: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(

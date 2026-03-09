@@ -1,7 +1,7 @@
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, ForeignKey, Integer, String, text
+from sqlalchemy import Date, DateTime, ForeignKey, Integer, String, Text, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -18,7 +18,7 @@ class ContentItem(Base):
     section: Mapped[str] = mapped_column(String(10), nullable=False, default="main", server_default="main")  # main | base
     display_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     title: Mapped[str] = mapped_column(String(500), nullable=False)
-    subtitle: Mapped[str | None] = mapped_column(String(1000))
+    subtitle: Mapped[str | None] = mapped_column(Text)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     url: Mapped[str | None] = mapped_column(String(2048))  # for checklist: PDF or link
     created_at: Mapped[datetime] = mapped_column(
@@ -46,7 +46,7 @@ class ContentSubItem(Base):
         UUID(as_uuid=True), ForeignKey("content_items.id", ondelete="CASCADE")
     )
     title: Mapped[str] = mapped_column(String(500), nullable=False)
-    description: Mapped[str | None] = mapped_column(String(2000))
+    description: Mapped[str | None] = mapped_column(Text)
     url: Mapped[str | None] = mapped_column(String(2048))  # own video URL
     duration: Mapped[str | None] = mapped_column(String(20))  # e.g. "3:42"
     sort_order: Mapped[int] = mapped_column(Integer, default=0)

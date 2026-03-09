@@ -75,7 +75,11 @@ class _SavedScreenState extends State<SavedScreen> {
     final url = item.url?.trim();
     if (url == null || url.isEmpty) return;
     Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => VideoPlayerScreen(videoUrl: url, title: item.title),
+      builder: (_) => VideoPlayerScreen(
+        videoUrl: url,
+        title: item.title,
+        description: item.subtitle,
+      ),
     ));
   }
 

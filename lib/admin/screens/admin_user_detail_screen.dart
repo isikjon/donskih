@@ -218,6 +218,12 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
             _InfoRow('Последняя активность', _formatDate(user['last_active_at'] as String?)),
           if (tg != null)
             _InfoRow('Telegram привязан', _formatDate(tg['linked_at'] as String?)),
+          if (_user?['subscription'] != null &&
+              (_user!['subscription'] as Map<String, dynamic>)['instagram'] != null)
+            _InfoRow(
+              'Instagram',
+              '@${(_user!['subscription'] as Map<String, dynamic>)['instagram']}',
+            ),
         ],
       ),
     );

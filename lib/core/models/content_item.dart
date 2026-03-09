@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 class ContentSubItemDto {
   final String id;
   final String title;
@@ -69,6 +71,26 @@ class ContentItemDto {
 
   bool get isVideo => type == 'video';
   bool get isChecklist => type == 'checklist';
+
+  /// Subtitle can be plain text or Quill Delta JSON. Returns plain text for display.
+  static String? subtitleToPlainText(String? s) {
+    if (s == null || s.trim().isEmpty) return null;
+    final t = s.trim();
+    if (!t.startsWith('[')) return s;
+    try {
+      final list = jsonDecode(s) as List<dynamic>;
+      final buf = StringBuffer();
+      for (final op in list) {
+        if (op is Map<String, dynamic> && op['insert'] is String) {
+          buf.write(op['insert']);
+        }
+      }
+      final out = buf.toString().trim();
+      return out.isEmpty ? null : out;
+    } catch (_) {
+      return s;
+    }
+  }
 
   /// "2025-02-06" → "06 февраля"
   static String formatDisplayDate(String isoDate) {
