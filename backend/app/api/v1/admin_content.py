@@ -126,8 +126,9 @@ async def _convert_video_task(task_id: str, source: Path, folder: Path, upload_r
         playlist = folder / "index.m3u8"
         segment_pattern = folder / "segment_%03d.ts"
         cmd = [
-            "ffmpeg", "-y", "-i", str(source),
-            "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+            "ffmpeg", "-y", "-threads", "0", "-i", str(source),
+            "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
+            "-vf", "scale=-2:'min(1080,ih)'",
             "-c:a", "aac", "-b:a", "128k", "-ac", "2", "-ar", "48000",
             "-f", "hls", "-hls_time", "6", "-hls_playlist_type", "vod",
             "-hls_segment_filename", str(segment_pattern),
@@ -157,12 +158,13 @@ async def _convert_video_task(task_id: str, source: Path, folder: Path, upload_r
         thumb_rel = thumbnail.relative_to(upload_root).as_posix() if thumbnail.exists() else None
         base = settings.hls_public_base_url.rstrip("/")
 
+        original_name = _conversion_tasks[task_id].get("original_name", "video")
         _conversion_tasks[task_id].update(
             status="done",
             progress=1.0,
             result={
                 "url": f"{base}/{rel}",
-                "filename": playlist.name,
+                "filename": original_name,
                 "thumbnail_url": f"{base}/{thumb_rel}" if thumb_rel else None,
                 "size_bytes": _conversion_tasks[task_id].get("size_bytes", 0),
             },
@@ -202,11 +204,13 @@ async def upload_video_file(
             "size_bytes": written,
         }
 
+    original_name = Path(file.filename).stem
     task_id = uuid.uuid4().hex
     _conversion_tasks[task_id] = {
         "status": "queued",
         "progress": 0.0,
         "size_bytes": written,
+        "original_name": original_name,
         "result": None,
         "error": None,
     }

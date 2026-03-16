@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
@@ -866,6 +867,7 @@ class _SubItemBlock extends StatelessWidget {
                   uploadedFilename: form.uploadedFilename,
                   thumbnailUrl: form.thumbnailUrl,
                   urlText: form.videoUrl,
+                  videoUrl: form.videoUrl,
                   onUpload: onUploadVideo,
                   onRetry: onRetryUpload,
                 ),
@@ -893,6 +895,7 @@ class _VideoUploadBlock extends StatelessWidget {
   final String? uploadedFilename;
   final String? thumbnailUrl;
   final String urlText;
+  final String? videoUrl;
   final VoidCallback onUpload;
   final VoidCallback onRetry;
 
@@ -907,9 +910,17 @@ class _VideoUploadBlock extends StatelessWidget {
     this.uploadedFilename,
     this.thumbnailUrl,
     required this.urlText,
+    this.videoUrl,
     required this.onUpload,
     required this.onRetry,
   });
+
+  static void _openUrl(String url) {
+    final uri = Uri.tryParse(url);
+    if (uri != null) {
+      launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1051,23 +1062,50 @@ class _VideoUploadBlock extends StatelessWidget {
             ),
             child: Row(
               children: [
-                // Thumbnail preview
+                // Clickable thumbnail preview
                 if (thumbnailUrl != null && thumbnailUrl!.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(right: 12),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: Image.network(
-                        thumbnailUrl!,
-                        width: 80,
-                        height: 80,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Container(
-                          width: 80,
-                          height: 80,
-                          color: AppColors.surfaceSecondary,
-                          child: const Icon(Icons.videocam,
-                              color: AppColors.textTertiary, size: 32),
+                    child: MouseRegion(
+                      cursor: SystemMouseCursors.click,
+                      child: GestureDetector(
+                        onTap: () {
+                          final url = videoUrl;
+                          if (url != null && url.isNotEmpty) {
+                            _openUrl(url);
+                          }
+                        },
+                        child: Stack(
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: Image.network(
+                                thumbnailUrl!,
+                                width: 80,
+                                height: 80,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => Container(
+                                  width: 80,
+                                  height: 80,
+                                  color: AppColors.surfaceSecondary,
+                                  child: const Icon(Icons.videocam,
+                                      color: AppColors.textTertiary, size: 32),
+                                ),
+                              ),
+                            ),
+                            Positioned.fill(
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withValues(alpha: 0.3),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Center(
+                                  child: Icon(Icons.play_circle_fill,
+                                      color: Colors.white, size: 32),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
@@ -1090,7 +1128,8 @@ class _VideoUploadBlock extends StatelessWidget {
                           ),
                         ],
                       ),
-                      if (uploadedFilename != null) ...[
+                      if (uploadedFilename != null &&
+                          uploadedFilename != 'index.m3u8') ...[
                         const SizedBox(height: 4),
                         Text(
                           uploadedFilename!,
