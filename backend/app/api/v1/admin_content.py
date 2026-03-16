@@ -1,9 +1,11 @@
 import asyncio
 import logging
+import os
 import re
 import subprocess
 from datetime import datetime
 from pathlib import Path
+from typing import Dict
 from uuid import UUID
 import uuid
 
@@ -25,6 +27,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/admin/content", tags=["admin-content"])
+
+# In-memory store for video conversion tasks
+_conversion_tasks: Dict[str, dict] = {}
 
 
 async def require_admin(x_admin_key: str | None = Header(None, alias="X-Admin-Key")):
@@ -67,6 +72,106 @@ async def _write_upload_file(file: UploadFile, target: Path, max_bytes: int) -> 
     return written
 
 
+def _get_video_duration_seconds(source: Path) -> float | None:
+    """Get video duration in seconds using ffprobe."""
+    try:
+        result = subprocess.run(
+            ["ffprobe", "-v", "quiet", "-show_entries", "format=duration",
+             "-of", "default=noprint_wrappers=1:nokey=1", str(source)],
+            capture_output=True, text=True, timeout=30,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return float(result.stdout.strip())
+    except Exception:
+        pass
+    return None
+
+
+def _run_ffmpeg_with_progress(cmd: list[str], task_id: str, duration_secs: float | None) -> int:
+    """Run ffmpeg and update _conversion_tasks with progress based on time."""
+    progress_cmd = cmd + ["-progress", "pipe:1", "-nostats"]
+    proc = subprocess.Popen(
+        progress_cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        for line in proc.stdout:
+            line = line.strip()
+            if line.startswith("out_time_us=") and duration_secs and duration_secs > 0:
+                try:
+                    time_us = int(line.split("=", 1)[1])
+                    progress = min(time_us / (duration_secs * 1_000_000), 0.99)
+                    if task_id in _conversion_tasks:
+                        _conversion_tasks[task_id]["progress"] = round(progress, 3)
+                except (ValueError, ZeroDivisionError):
+                    pass
+            elif line.startswith("progress=end"):
+                if task_id in _conversion_tasks:
+                    _conversion_tasks[task_id]["progress"] = 1.0
+    except Exception:
+        pass
+    proc.wait()
+    return proc.returncode
+
+
+async def _convert_video_task(task_id: str, source: Path, folder: Path, upload_root: Path):
+    """Background task: convert video to HLS, generate thumbnail, update progress."""
+    try:
+        duration = await asyncio.to_thread(_get_video_duration_seconds, source)
+        _conversion_tasks[task_id]["status"] = "converting"
+        _conversion_tasks[task_id]["progress"] = 0.0
+
+        playlist = folder / "index.m3u8"
+        segment_pattern = folder / "segment_%03d.ts"
+        cmd = [
+            "ffmpeg", "-y", "-i", str(source),
+            "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+            "-c:a", "aac", "-b:a", "128k", "-ac", "2", "-ar", "48000",
+            "-f", "hls", "-hls_time", "6", "-hls_playlist_type", "vod",
+            "-hls_segment_filename", str(segment_pattern),
+            str(playlist),
+        ]
+        returncode = await asyncio.to_thread(
+            _run_ffmpeg_with_progress, cmd, task_id, duration
+        )
+        if returncode != 0 or not playlist.exists():
+            _conversion_tasks[task_id].update(
+                status="error", error="Video conversion failed"
+            )
+            return
+
+        source.unlink(missing_ok=True)
+
+        # Generate thumbnail
+        _conversion_tasks[task_id]["status"] = "thumbnail"
+        thumbnail = folder / "thumb.jpg"
+        thumb_cmd = [
+            "ffmpeg", "-y", "-ss", "00:00:03", "-i", str(playlist),
+            "-frames:v", "1", "-q:v", "2", str(thumbnail),
+        ]
+        await asyncio.to_thread(subprocess.run, thumb_cmd, capture_output=True, text=True)
+
+        rel = playlist.relative_to(upload_root).as_posix()
+        thumb_rel = thumbnail.relative_to(upload_root).as_posix() if thumbnail.exists() else None
+        base = settings.hls_public_base_url.rstrip("/")
+
+        _conversion_tasks[task_id].update(
+            status="done",
+            progress=1.0,
+            result={
+                "url": f"{base}/{rel}",
+                "filename": playlist.name,
+                "thumbnail_url": f"{base}/{thumb_rel}" if thumb_rel else None,
+                "size_bytes": _conversion_tasks[task_id].get("size_bytes", 0),
+            },
+        )
+    except Exception as exc:
+        logger.exception("Conversion task %s failed", task_id)
+        _conversion_tasks[task_id].update(status="error", error=str(exc))
+
+
 @router.post("/upload-video", response_model=dict)
 async def upload_video_file(
     file: UploadFile = File(...),
@@ -87,73 +192,53 @@ async def upload_video_file(
     max_bytes = settings.upload_max_size_mb * 1024 * 1024
     written = await _write_upload_file(file, target, max_bytes)
 
-    playlist = folder / "index.m3u8"
     if suffix == ".m3u8":
-        playlist = target
-    else:
-        segment_pattern = folder / "segment_%03d.ts"
-        cmd = [
-            "ffmpeg",
-            "-y",
-            "-i",
-            str(target),
-            "-c:v",
-            "libx264",
-            "-preset",
-            "veryfast",
-            "-crf",
-            "23",
-            "-c:a",
-            "aac",
-            "-b:a",
-            "128k",
-            "-ac",
-            "2",
-            "-ar",
-            "48000",
-            "-f",
-            "hls",
-            "-hls_time",
-            "6",
-            "-hls_playlist_type",
-            "vod",
-            "-hls_segment_filename",
-            str(segment_pattern),
-            str(playlist),
-        ]
-        proc = await asyncio.to_thread(subprocess.run, cmd, capture_output=True, text=True)
-        if proc.returncode != 0 or not playlist.exists():
-            logger.error("ffmpeg failed: %s", proc.stderr)
-            raise HTTPException(status_code=500, detail="Video conversion failed")
-        target.unlink(missing_ok=True)
+        rel = target.relative_to(upload_root).as_posix()
+        base = settings.hls_public_base_url.rstrip("/")
+        return {
+            "url": f"{base}/{rel}",
+            "filename": target.name,
+            "thumbnail_url": None,
+            "size_bytes": written,
+        }
 
-    thumbnail = folder / "thumb.jpg"
-    thumb_cmd = [
-        "ffmpeg",
-        "-y",
-        "-ss",
-        "00:00:03",
-        "-i",
-        str(playlist),
-        "-frames:v",
-        "1",
-        "-q:v",
-        "2",
-        str(thumbnail),
-    ]
-    thumb_proc = await asyncio.to_thread(subprocess.run, thumb_cmd, capture_output=True, text=True)
-    if thumb_proc.returncode != 0:
-        logger.warning("thumbnail generation failed: %s", thumb_proc.stderr)
-
-    rel = playlist.relative_to(upload_root).as_posix()
-    thumb_rel = thumbnail.relative_to(upload_root).as_posix() if thumbnail.exists() else None
-    base = settings.hls_public_base_url.rstrip("/")
-    return {
-        "url": f"{base}/{rel}",
-        "filename": playlist.name,
-        "thumbnail_url": f"{base}/{thumb_rel}" if thumb_rel else None,
+    task_id = uuid.uuid4().hex
+    _conversion_tasks[task_id] = {
+        "status": "queued",
+        "progress": 0.0,
         "size_bytes": written,
+        "result": None,
+        "error": None,
     }
+
+    asyncio.create_task(_convert_video_task(task_id, target, folder, upload_root))
+
+    return {"task_id": task_id, "status": "queued", "size_bytes": written}
+
+
+@router.get("/upload-video/progress/{task_id}", response_model=dict)
+async def get_video_progress(
+    task_id: str,
+    _: None = Depends(require_admin),
+):
+    task = _conversion_tasks.get(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    response = {
+        "task_id": task_id,
+        "status": task["status"],
+        "progress": task["progress"],
+    }
+    if task["status"] == "done" and task["result"]:
+        response["result"] = task["result"]
+        # Clean up after client retrieves result
+        _conversion_tasks.pop(task_id, None)
+    elif task["status"] == "error":
+        response["error"] = task.get("error", "Unknown error")
+        _conversion_tasks.pop(task_id, None)
+
+    return response
 
 
 @router.post("/upload-image", response_model=dict)

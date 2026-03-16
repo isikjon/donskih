@@ -372,6 +372,32 @@ class AdminApiService {
     }
   }
 
+  /// Poll conversion progress for a video upload task.
+  Future<Map<String, dynamic>?> getVideoConversionProgress(
+    String? adminKey,
+    String taskId,
+  ) async {
+    lastError = null;
+    if (adminKey == null || adminKey.isEmpty) {
+      lastError = 'Нет ключа администратора';
+      return null;
+    }
+    try {
+      final resp = await http.get(
+        Uri.parse('$apiBase/admin/content/upload-video/progress/$taskId'),
+        headers: _headers(adminKey),
+      );
+      if (resp.statusCode != 200) {
+        lastError = _errorFromResponse(resp);
+        return null;
+      }
+      return jsonDecode(resp.body) as Map<String, dynamic>;
+    } catch (e) {
+      lastError = e.toString();
+      return null;
+    }
+  }
+
   Future<Map<String, dynamic>?> uploadChecklistBytes(
     String? adminKey, {
     required String filename,

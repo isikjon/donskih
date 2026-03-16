@@ -19,11 +19,15 @@ class _SubItemFormData {
   QuillController? quillController;
   final FocusNode quillFocusNode;
   String videoUrl;
+  String? thumbnailUrl;
   String? uploadedFilename;
-  String videoUploadStatus; // idle | uploading | success | error
+  String videoUploadStatus; // idle | uploading | converting | success | error
   double videoUploadProgress;
+  double videoConversionProgress;
   String? videoUploadError;
   bool isUploading;
+  bool isConverting;
+  String? conversionTaskId;
 
   _SubItemFormData({
     String? title,
@@ -32,14 +36,23 @@ class _SubItemFormData {
   })  : titleController = TextEditingController(text: title ?? ''),
         quillFocusNode = FocusNode(),
         videoUrl = url ?? '',
+        thumbnailUrl = null,
         videoUploadStatus =
             url != null && url.isNotEmpty ? 'success' : 'idle',
         videoUploadProgress = 0.0,
+        videoConversionProgress = 0.0,
         videoUploadError = null,
-        isUploading = false {
+        isUploading = false,
+        isConverting = false,
+        conversionTaskId = null {
     if (url != null && url.isNotEmpty) {
       final segs = Uri.tryParse(url)?.pathSegments;
       uploadedFilename = (segs != null && segs.isNotEmpty) ? segs.last : null;
+      // Derive thumbnail URL from HLS URL
+      if (url.endsWith('/index.m3u8')) {
+        thumbnailUrl =
+            url.replaceFirst(RegExp(r'/index\.m3u8$'), '/thumb.jpg');
+      }
     }
     _initQuill(description);
   }
@@ -260,15 +273,17 @@ class _AdminContentEditScreenState extends State<AdminContentEditScreen> {
         return;
       }
 
-      // Use native file picker (zero-copy) for large video files on web
       final nativeFile = await pickVideoNative();
       if (nativeFile == null) return;
 
       setState(() {
         form.isUploading = true;
+        form.isConverting = false;
         form.videoUploadStatus = 'uploading';
         form.videoUploadProgress = 0.0;
+        form.videoConversionProgress = 0.0;
         form.videoUploadError = null;
+        form.conversionTaskId = null;
         _error = null;
       });
 
@@ -288,6 +303,7 @@ class _AdminContentEditScreenState extends State<AdminContentEditScreen> {
       if (uploaded == null) {
         setState(() {
           form.isUploading = false;
+          form.isConverting = false;
           form.videoUploadStatus = 'error';
           form.videoUploadError = _api.lastError ??
               'Ошибка загрузки. Перезагрузите страницу и попробуйте снова.';
@@ -295,21 +311,91 @@ class _AdminContentEditScreenState extends State<AdminContentEditScreen> {
         return;
       }
 
-      setState(() {
-        form.isUploading = false;
-        form.videoUrl = uploaded['url'] as String? ?? '';
-        form.uploadedFilename = uploaded['filename'] as String?;
-        form.videoUploadStatus = 'success';
-        form.videoUploadProgress = 1.0;
-        form.videoUploadError = null;
-      });
+      // Check if backend returned a task_id (two-phase conversion)
+      final taskId = uploaded['task_id'] as String?;
+      if (taskId != null) {
+        setState(() {
+          form.isUploading = false;
+          form.isConverting = true;
+          form.videoUploadStatus = 'converting';
+          form.videoUploadProgress = 1.0;
+          form.videoConversionProgress = 0.0;
+          form.conversionTaskId = taskId;
+        });
+        await _pollConversionProgress(index, taskId);
+      } else {
+        // Direct result (e.g. .m3u8 files)
+        setState(() {
+          form.isUploading = false;
+          form.isConverting = false;
+          form.videoUrl = uploaded['url'] as String? ?? '';
+          form.uploadedFilename = uploaded['filename'] as String?;
+          form.thumbnailUrl = uploaded['thumbnail_url'] as String?;
+          form.videoUploadStatus = 'success';
+          form.videoUploadProgress = 1.0;
+          form.videoUploadError = null;
+        });
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() {
         form.isUploading = false;
+        form.isConverting = false;
         form.videoUploadStatus = 'error';
         form.videoUploadError = 'Ошибка выбора файла: $e';
       });
+    }
+  }
+
+  Future<void> _pollConversionProgress(int index, String taskId) async {
+    final form = _subItemForms[index];
+    while (mounted && form.conversionTaskId == taskId) {
+      await Future.delayed(const Duration(seconds: 2));
+      if (!mounted || form.conversionTaskId != taskId) break;
+
+      final progress =
+          await _api.getVideoConversionProgress(_adminKey, taskId);
+      if (!mounted || form.conversionTaskId != taskId) break;
+
+      if (progress == null) {
+        setState(() {
+          form.isConverting = false;
+          form.videoUploadStatus = 'error';
+          form.videoUploadError = _api.lastError ?? 'Потеряна связь с сервером';
+        });
+        return;
+      }
+
+      final status = progress['status'] as String?;
+      final prog = (progress['progress'] as num?)?.toDouble() ?? 0.0;
+
+      if (status == 'done') {
+        final result = progress['result'] as Map<String, dynamic>?;
+        setState(() {
+          form.isConverting = false;
+          form.videoConversionProgress = 1.0;
+          form.videoUrl = result?['url'] as String? ?? '';
+          form.uploadedFilename = result?['filename'] as String?;
+          form.thumbnailUrl = result?['thumbnail_url'] as String?;
+          form.videoUploadStatus = 'success';
+          form.videoUploadError = null;
+          form.conversionTaskId = null;
+        });
+        return;
+      } else if (status == 'error') {
+        setState(() {
+          form.isConverting = false;
+          form.videoUploadStatus = 'error';
+          form.videoUploadError =
+              progress['error'] as String? ?? 'Ошибка конвертации';
+          form.conversionTaskId = null;
+        });
+        return;
+      } else {
+        setState(() {
+          form.videoConversionProgress = prog.clamp(0.0, 1.0);
+        });
+      }
     }
   }
 
@@ -319,6 +405,9 @@ class _AdminContentEditScreenState extends State<AdminContentEditScreen> {
       form.videoUploadStatus = 'idle';
       form.videoUploadError = null;
       form.videoUploadProgress = 0.0;
+      form.videoConversionProgress = 0.0;
+      form.isConverting = false;
+      form.conversionTaskId = null;
     });
     _uploadSubItemVideo(index);
   }
@@ -477,7 +566,8 @@ class _AdminContentEditScreenState extends State<AdminContentEditScreen> {
   @override
   Widget build(BuildContext context) {
     final anyUploading =
-        _subItemForms.any((f) => f.isUploading) || _checklistUploading;
+        _subItemForms.any((f) => f.isUploading || f.isConverting) ||
+            _checklistUploading;
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -767,11 +857,14 @@ class _SubItemBlock extends StatelessWidget {
                 const SizedBox(height: 14),
                 _VideoUploadBlock(
                   isUploading: form.isUploading,
+                  isConverting: form.isConverting,
                   isSaving: isSaving,
                   uploadStatus: form.videoUploadStatus,
                   uploadProgress: form.videoUploadProgress,
+                  conversionProgress: form.videoConversionProgress,
                   uploadError: form.videoUploadError,
                   uploadedFilename: form.uploadedFilename,
+                  thumbnailUrl: form.thumbnailUrl,
                   urlText: form.videoUrl,
                   onUpload: onUploadVideo,
                   onRetry: onRetryUpload,
@@ -791,22 +884,28 @@ class _SubItemBlock extends StatelessWidget {
 
 class _VideoUploadBlock extends StatelessWidget {
   final bool isUploading;
+  final bool isConverting;
   final bool isSaving;
-  final String uploadStatus; // idle | uploading | success | error
+  final String uploadStatus; // idle | uploading | converting | success | error
   final double uploadProgress;
+  final double conversionProgress;
   final String? uploadError;
   final String? uploadedFilename;
+  final String? thumbnailUrl;
   final String urlText;
   final VoidCallback onUpload;
   final VoidCallback onRetry;
 
   const _VideoUploadBlock({
     required this.isUploading,
+    required this.isConverting,
     required this.isSaving,
     required this.uploadStatus,
     required this.uploadProgress,
+    required this.conversionProgress,
     this.uploadError,
     this.uploadedFilename,
+    this.thumbnailUrl,
     required this.urlText,
     required this.onUpload,
     required this.onRetry,
@@ -814,9 +913,11 @@ class _VideoUploadBlock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final showProgress = uploadStatus == 'uploading';
+    final showUploadProgress = uploadStatus == 'uploading';
+    final showConvertProgress = uploadStatus == 'converting';
     final showSuccess = uploadStatus == 'success';
     final showError = uploadStatus == 'error';
+    final isBusy = isUploading || isConverting;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -824,8 +925,8 @@ class _VideoUploadBlock extends StatelessWidget {
         Row(
           children: [
             FilledButton.icon(
-              onPressed: (isUploading || isSaving) ? null : onUpload,
-              icon: isUploading
+              onPressed: (isBusy || isSaving) ? null : onUpload,
+              icon: isBusy
                   ? const SizedBox(
                       width: 16,
                       height: 16,
@@ -836,7 +937,7 @@ class _VideoUploadBlock extends StatelessWidget {
                     )
                   : const Icon(Icons.upload_file_outlined),
               label: Text(
-                isUploading ? 'Загрузка...' : 'Загрузить видео',
+                isBusy ? 'Загрузка...' : 'Загрузить видео',
               ),
             ),
             const SizedBox(width: 12),
@@ -853,7 +954,8 @@ class _VideoUploadBlock extends StatelessWidget {
             ),
           ],
         ),
-        if (showProgress) ...[
+        // Upload progress bar
+        if (showUploadProgress) ...[
           const SizedBox(height: 12),
           LinearProgressIndicator(
             value: uploadProgress,
@@ -874,7 +976,7 @@ class _VideoUploadBlock extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Text(
-                'Видео загружается...',
+                'Загрузка файла на сервер...',
                 style: AppTypography.bodySmall.copyWith(
                   color: AppColors.textSecondary,
                 ),
@@ -882,6 +984,57 @@ class _VideoUploadBlock extends StatelessWidget {
             ],
           ),
         ],
+        // Conversion progress bar
+        if (showConvertProgress) ...[
+          const SizedBox(height: 12),
+          // Upload complete checkmark
+          Row(
+            children: [
+              Icon(Icons.check_circle,
+                  color: AppColors.success.withValues(alpha: 0.7), size: 18),
+              const SizedBox(width: 6),
+              Text(
+                'Файл загружен',
+                style: AppTypography.bodySmall.copyWith(
+                  color: AppColors.success,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          LinearProgressIndicator(
+            value: conversionProgress > 0 ? conversionProgress : null,
+            backgroundColor: AppColors.border,
+            valueColor: AlwaysStoppedAnimation<Color>(
+              Colors.orange.shade700,
+            ),
+            minHeight: 6,
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              if (conversionProgress > 0)
+                Text(
+                  '${(conversionProgress * 100).round()}%',
+                  style: AppTypography.labelSmall.copyWith(
+                    color: Colors.orange.shade700,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              if (conversionProgress > 0) const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Оптимизация видео для приложения...',
+                  style: AppTypography.bodySmall.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+        // Success state with thumbnail preview
         if (showSuccess) ...[
           const SizedBox(height: 12),
           Container(
@@ -898,20 +1051,64 @@ class _VideoUploadBlock extends StatelessWidget {
             ),
             child: Row(
               children: [
-                const Icon(Icons.check_circle,
-                    color: AppColors.success, size: 22),
-                const SizedBox(width: 10),
-                Text(
-                  'Видео успешно загружено',
-                  style: AppTypography.bodyMedium.copyWith(
-                    color: AppColors.success,
-                    fontWeight: FontWeight.w500,
+                // Thumbnail preview
+                if (thumbnailUrl != null && thumbnailUrl!.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 12),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.network(
+                        thumbnailUrl!,
+                        width: 80,
+                        height: 80,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Container(
+                          width: 80,
+                          height: 80,
+                          color: AppColors.surfaceSecondary,
+                          child: const Icon(Icons.videocam,
+                              color: AppColors.textTertiary, size: 32),
+                        ),
+                      ),
+                    ),
+                  ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.check_circle,
+                              color: AppColors.success, size: 22),
+                          const SizedBox(width: 10),
+                          Text(
+                            'Видео готово',
+                            style: AppTypography.bodyMedium.copyWith(
+                              color: AppColors.success,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (uploadedFilename != null) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          uploadedFilename!,
+                          style: AppTypography.bodySmall.copyWith(
+                            color: AppColors.textTertiary,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ],
                   ),
                 ),
               ],
             ),
           ),
         ],
+        // Error state
         if (showError) ...[
           const SizedBox(height: 12),
           Container(
@@ -949,7 +1146,7 @@ class _VideoUploadBlock extends StatelessWidget {
                 ),
                 const SizedBox(height: 10),
                 TextButton.icon(
-                  onPressed: isUploading ? null : onRetry,
+                  onPressed: isBusy ? null : onRetry,
                   icon: const Icon(Icons.refresh, size: 18),
                   label: const Text('Повторить загрузку'),
                   style: TextButton.styleFrom(
