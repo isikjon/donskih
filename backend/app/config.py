@@ -55,7 +55,7 @@ class Settings(BaseSettings):
     admin_secret_key: str = ""
     hls_upload_dir: str = "/var/www/hls/uploads"
     hls_public_base_url: str = "https://donskih-cdn.ru/hls/uploads"
-    upload_max_size_mb: int = 1024
+    upload_max_size_mb: int = 2500
 
     # Rate Limiting
     rate_limit_send_code_per_ip: str = "30/10min"

@@ -260,8 +260,9 @@ class _AdminContentEditScreenState extends State<AdminContentEditScreen> {
         return;
       }
 
-      final picked = await pickVideoFile();
-      if (picked == null) return;
+      // Use native file picker (zero-copy) for large video files on web
+      final nativeFile = await pickVideoNative();
+      if (nativeFile == null) return;
 
       setState(() {
         form.isUploading = true;
@@ -271,10 +272,9 @@ class _AdminContentEditScreenState extends State<AdminContentEditScreen> {
         _error = null;
       });
 
-      final uploaded = await _api.uploadVideoBytes(
+      final uploaded = await _api.uploadVideoNative(
         _adminKey,
-        filename: picked.name,
-        bytes: picked.bytes,
+        nativeFile: nativeFile,
         onUploadProgress: (sent, total) {
           if (!mounted || total <= 0) return;
           setState(() {
@@ -298,8 +298,7 @@ class _AdminContentEditScreenState extends State<AdminContentEditScreen> {
       setState(() {
         form.isUploading = false;
         form.videoUrl = uploaded['url'] as String? ?? '';
-        form.uploadedFilename =
-            uploaded['filename'] as String? ?? picked.name;
+        form.uploadedFilename = uploaded['filename'] as String?;
         form.videoUploadStatus = 'success';
         form.videoUploadProgress = 1.0;
         form.videoUploadError = null;

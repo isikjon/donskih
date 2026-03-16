@@ -61,9 +61,10 @@ class ChatService {
 
   void _openSocket(String token) {
     try {
-      _channel = WebSocketChannel.connect(
-        Uri.parse('$_wsBase?token=$token'),
+      final uri = Uri.parse(_wsBase).replace(
+        queryParameters: {'token': token},
       );
+      _channel = WebSocketChannel.connect(uri);
       _connected = true;
 
       _sub = _channel!.stream.listen(
@@ -149,6 +150,7 @@ class ChatService {
               isDeleted: true,
               clearText: true,
               clearImageUrl: true,
+              clearVideoUrl: true,
             );
             _push();
           }
@@ -219,6 +221,19 @@ class ChatService {
     final body = <String, dynamic>{'image_url': imageUrl};
     if (caption != null && caption.isNotEmpty) body['text'] = caption;
     if (groupId != null) body['group_id'] = groupId;
+    if (replyToMessageId != null) body['reply_to_message_id'] = replyToMessageId;
+    await _post('/messages', body);
+  }
+
+  Future<void> sendVideoMessage(
+    String videoUrl, {
+    String? thumbnailUrl,
+    String? caption,
+    String? replyToMessageId,
+  }) async {
+    final body = <String, dynamic>{'video_url': videoUrl};
+    if (thumbnailUrl != null) body['video_thumbnail_url'] = thumbnailUrl;
+    if (caption != null && caption.isNotEmpty) body['text'] = caption;
     if (replyToMessageId != null) body['reply_to_message_id'] = replyToMessageId;
     await _post('/messages', body);
   }
@@ -312,6 +327,69 @@ class ChatService {
       }
     } catch (e) {
       debugPrint('ChatService: uploadImage error: $e');
+    }
+    return null;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Video upload
+  // ---------------------------------------------------------------------------
+
+  /// Upload video with progress tracking.
+  /// Returns {videoUrl, thumbnailUrl} on success, null on failure.
+  Future<Map<String, String?>?> uploadVideo(
+    XFile file, {
+    void Function(double)? onProgress,
+  }) async {
+    final token = await _auth.accessToken;
+    if (token == null) return null;
+
+    try {
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('$_httpBase/upload-video'),
+      )
+        ..headers['Authorization'] = 'Bearer $token'
+        ..files.add(await http.MultipartFile.fromPath('file', file.path));
+
+      final totalLength = request.contentLength;
+      final origStream = request.finalize();
+
+      int sent = 0;
+      final progressStream = origStream.transform(
+        StreamTransformer<List<int>, List<int>>.fromHandlers(
+          handleData: (data, sink) {
+            sent += data.length;
+            onProgress?.call((sent / totalLength).clamp(0.0, 1.0));
+            sink.add(data);
+          },
+        ),
+      );
+
+      final streamedReq = http.StreamedRequest('POST', request.url);
+      request.headers.forEach((k, v) => streamedReq.headers[k] = v);
+      streamedReq.contentLength = totalLength;
+
+      progressStream.listen(
+        streamedReq.sink.add,
+        onDone: streamedReq.sink.close,
+        onError: streamedReq.sink.addError,
+        cancelOnError: true,
+      );
+
+      final streamed = await http.Client().send(streamedReq);
+      final resp = await http.Response.fromStream(streamed);
+
+      if (resp.statusCode == 200) {
+        final data = jsonDecode(resp.body) as Map<String, dynamic>;
+        return {
+          'videoUrl': data['video_url'] as String?,
+          'thumbnailUrl': data['thumbnail_url'] as String?,
+        };
+      }
+      debugPrint('ChatService: uploadVideo status=${resp.statusCode} body=${resp.body}');
+    } catch (e) {
+      debugPrint('ChatService: uploadVideo error: $e');
     }
     return null;
   }

@@ -1,5 +1,7 @@
+import asyncio
 import logging
 import os
+import subprocess
 import uuid
 from pathlib import Path
 
@@ -36,6 +38,8 @@ CHAT_UPLOAD_DIR = "/app/static/chat"
 CHAT_PUBLIC_BASE = "https://donskih-cdn.ru/static/chat"
 ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
 MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB
+ALLOWED_VIDEO_EXTENSIONS = {".mp4", ".mov", ".m4v", ".mkv", ".webm"}
+MAX_VIDEO_SIZE_BYTES = 200 * 1024 * 1024  # 200 MB
 
 
 # ---------------------------------------------------------------------------
@@ -94,6 +98,8 @@ def _serialize(msg: ChatMessage) -> dict:
         "sender_photo_url": tg.photo_url if tg else None,
         "text": msg.text if not msg.is_deleted else None,
         "image_url": msg.image_url if not msg.is_deleted else None,
+        "video_url": msg.video_url if not msg.is_deleted else None,
+        "video_thumbnail_url": msg.video_thumbnail_url if not msg.is_deleted else None,
         "group_id": msg.group_id,
         "reply_to_message_id": str(msg.reply_to_message_id) if msg.reply_to_message_id else None,
         "is_edited": msg.is_edited,
@@ -177,8 +183,8 @@ async def send_message(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict:
-    if not req.text and not req.image_url:
-        raise HTTPException(status_code=400, detail="Either text or image_url is required")
+    if not req.text and not req.image_url and not req.video_url:
+        raise HTTPException(status_code=400, detail="Either text, image_url or video_url is required")
 
     reply_to_uuid = None
     if req.reply_to_message_id:
@@ -191,6 +197,8 @@ async def send_message(
         user_id=current_user.id,
         text=req.text.strip() if req.text else None,
         image_url=req.image_url,
+        video_url=req.video_url,
+        video_thumbnail_url=req.video_thumbnail_url,
         group_id=req.group_id,
         reply_to_message_id=reply_to_uuid,
     )
@@ -313,6 +321,108 @@ async def upload_image(
         f.write(content)
 
     return {"image_url": f"{CHAT_PUBLIC_BASE}/{filename}"}
+
+
+# ---------------------------------------------------------------------------
+# REST: upload video
+# ---------------------------------------------------------------------------
+
+def _compress_video(source: Path, output: Path, thumb: Path) -> float | None:
+    """Run ffmpeg to compress video and extract thumbnail. Returns duration in seconds."""
+    cmd = [
+        "ffmpeg", "-y", "-i", str(source),
+        "-c:v", "libx264", "-preset", "veryfast", "-crf", "28",
+        "-c:a", "aac", "-b:a", "96k", "-ac", "2", "-ar", "44100",
+        "-movflags", "+faststart",
+        str(output),
+    ]
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    if proc.returncode != 0 or not output.exists():
+        logger.error("ffmpeg video compress failed: %s", proc.stderr)
+        return None
+
+    thumb_cmd = [
+        "ffmpeg", "-y", "-ss", "00:00:01", "-i", str(output),
+        "-frames:v", "1", "-q:v", "3", str(thumb),
+    ]
+    subprocess.run(thumb_cmd, capture_output=True, text=True)
+
+    dur_cmd = [
+        "ffprobe", "-v", "error", "-show_entries", "format=duration",
+        "-of", "default=noprint_wrappers=1:nokey=1", str(output),
+    ]
+    dur_proc = subprocess.run(dur_cmd, capture_output=True, text=True)
+    try:
+        return float(dur_proc.stdout.strip())
+    except (ValueError, AttributeError):
+        return None
+
+
+@router.post("/upload-video")
+async def upload_video(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No file provided")
+
+    ext = Path(file.filename).suffix.lower()
+    if ext not in ALLOWED_VIDEO_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported format. Allowed: {ALLOWED_VIDEO_EXTENSIONS}",
+        )
+
+    folder_name = str(uuid.uuid4())
+    video_dir = Path(CHAT_UPLOAD_DIR) / "videos" / folder_name
+    os.makedirs(video_dir, exist_ok=True)
+
+    source_path = video_dir / f"source{ext}"
+    written = 0
+    try:
+        with open(source_path, "wb") as f:
+            while True:
+                chunk = await file.read(1024 * 1024)
+                if not chunk:
+                    break
+                written += len(chunk)
+                if written > MAX_VIDEO_SIZE_BYTES:
+                    f.close()
+                    source_path.unlink(missing_ok=True)
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"Video too large (max {MAX_VIDEO_SIZE_BYTES // (1024*1024)} MB)",
+                    )
+                f.write(chunk)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Video upload write error: %s", e)
+        raise HTTPException(status_code=500, detail="Upload failed")
+
+    output_path = video_dir / "output.mp4"
+    thumb_path = video_dir / "thumb.jpg"
+
+    duration = await asyncio.to_thread(
+        _compress_video, source_path, output_path, thumb_path
+    )
+
+    if not output_path.exists():
+        raise HTTPException(status_code=500, detail="Video conversion failed")
+
+    source_path.unlink(missing_ok=True)
+
+    video_url = f"{CHAT_PUBLIC_BASE}/videos/{folder_name}/output.mp4"
+    thumb_url = (
+        f"{CHAT_PUBLIC_BASE}/videos/{folder_name}/thumb.jpg"
+        if thumb_path.exists()
+        else None
+    )
+    return {
+        "video_url": video_url,
+        "thumbnail_url": thumb_url,
+        "duration_sec": round(duration, 1) if duration else None,
+    }
 
 
 # ---------------------------------------------------------------------------

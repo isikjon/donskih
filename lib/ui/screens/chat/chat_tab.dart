@@ -14,6 +14,7 @@ import '../../../core/theme/app_typography.dart';
 import '../../components/app_avatar.dart';
 import '../media_viewer/media_viewer_screen.dart';
 import '../profile/user_profile_screen.dart';
+import '../video/video_player_screen.dart';
 
 // ---------------------------------------------------------------------------
 // Display item types — single message or a photo group
@@ -278,6 +279,116 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
   }
 
   // ---------------------------------------------------------------------------
+  // Attachment menu (photo / video)
+  // ---------------------------------------------------------------------------
+
+  void _showAttachmentMenu() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => Container(
+        margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 36, height: 4,
+                margin: const EdgeInsets.only(top: 12, bottom: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.border,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              ListTile(
+                dense: true,
+                leading: const Icon(Icons.photo_library_outlined,
+                    color: AppColors.primary, size: 22),
+                title: Text('Фото', style: AppTypography.bodyMedium),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickImages();
+                },
+              ),
+              ListTile(
+                dense: true,
+                leading: const Icon(Icons.videocam_outlined,
+                    color: AppColors.primary, size: 22),
+                title: Text('Видео', style: AppTypography.bodyMedium),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickVideo();
+                },
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Video pick → upload → send
+  // ---------------------------------------------------------------------------
+
+  Future<void> _pickVideo() async {
+    final file = await ImagePicker().pickVideo(source: ImageSource.gallery);
+    if (file == null || !mounted) return;
+
+    setState(() => _isUploading = true);
+
+    final tempId = 'video_${DateTime.now().millisecondsSinceEpoch}';
+    _uploadProgressMap[tempId] = 0.0;
+
+    final placeholder = ChatMessage(
+      id: tempId,
+      userId: _chat.currentUserId ?? '',
+      senderName: '',
+      videoUrl: 'local',
+      videoThumbnailUrl: null,
+      isDeleted: false,
+      isEdited: false,
+      createdAt: DateTime.now(),
+      status: MessageStatus.sending,
+      uploadProgress: 0.0,
+    );
+    _chat.addOptimistic(placeholder);
+    _scrollToBottom();
+
+    try {
+      final result = await _chat.uploadVideo(
+        file,
+        onProgress: (p) {
+          _uploadProgressMap[tempId] = p;
+          _chat.updateOptimisticProgress(tempId, p);
+        },
+      );
+
+      _uploadProgressMap.remove(tempId);
+      _chat.removeOptimistic(tempId);
+
+      if (result != null && mounted) {
+        final replyId = _replyingToMessage?.id;
+        _cancelReply();
+        await _chat.sendVideoMessage(
+          result['videoUrl']!,
+          thumbnailUrl: result['thumbnailUrl'],
+          replyToMessageId: replyId,
+        );
+        if (mounted) _scrollToBottom();
+      }
+    } finally {
+      if (mounted) setState(() => _isUploading = false);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // Long press menu
   // ---------------------------------------------------------------------------
 
@@ -517,6 +628,17 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
                             imageHeroTag: msg.imageUrl != null
                                 ? 'media_${msg.id}'
                                 : null,
+                            onVideoTap: msg.hasVideo &&
+                                    msg.status != MessageStatus.sending
+                                ? () => Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (_) => VideoPlayerScreen(
+                                          videoUrl: msg.videoUrl!,
+                                          title: msg.senderName,
+                                        ),
+                                      ),
+                                    )
+                                : null,
                           );
                         } else {
                           final g = item as _GroupItem;
@@ -741,9 +863,9 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
                       ),
                     )
                   : IconButton(
-                      icon: const Icon(Icons.image_outlined,
+                      icon: const Icon(Icons.attach_file_rounded,
                           color: AppColors.textTertiary, size: 24),
-                      onPressed: _pickImages,
+                      onPressed: _showAttachmentMenu,
                       padding: const EdgeInsets.all(8),
                   constraints:
                           const BoxConstraints(minWidth: 40, minHeight: 40),
@@ -967,6 +1089,7 @@ class _ReplyPreview extends StatelessWidget {
 
   static String _previewText(ChatMessage m) {
     if (m.text != null && m.text!.trim().isNotEmpty) return m.text!.trim();
+    if (m.videoUrl != null) return '🎬 Видео';
     if (m.imageUrl != null) return '📷 Фото';
     return '—';
   }
@@ -1253,7 +1376,7 @@ class _MediaGroupBubble extends StatelessWidget {
     if (reply == null || onReplyBlockTap == null) return const SizedBox.shrink();
     String preview = reply.text != null && reply.text!.trim().isNotEmpty
         ? reply.text!.trim()
-        : (reply.imageUrl != null ? '📷 Фото' : '—');
+        : (reply.videoUrl != null ? '🎬 Видео' : (reply.imageUrl != null ? '📷 Фото' : '—'));
     final lineColor = isMe ? AppColors.textOnPrimary.withValues(alpha: 0.6) : AppColors.primary.withValues(alpha: 0.85);
     final nameColor = isMe ? AppColors.textOnPrimary.withValues(alpha: 0.85) : AppColors.primary.withValues(alpha: 0.9);
     final textColor = isMe ? AppColors.textOnPrimary.withValues(alpha: 0.65) : AppColors.textSecondary.withValues(alpha: 0.9);
@@ -1724,6 +1847,7 @@ class _MessageBubble extends StatelessWidget {
   final String? imageHeroTag;
   final VoidCallback? onAvatarTap;
   final String? avatarHeroTag;
+  final VoidCallback? onVideoTap;
 
   const _MessageBubble({
     required this.message,
@@ -1737,6 +1861,7 @@ class _MessageBubble extends StatelessWidget {
     this.imageHeroTag,
     this.onAvatarTap,
     this.avatarHeroTag,
+    this.onVideoTap,
   });
 
   @override
@@ -1801,11 +1926,109 @@ class _MessageBubble extends StatelessWidget {
 
   Widget _buildBubble() {
     final hasImage = message.imageUrl != null;
+    final hasVideo = message.hasVideo;
     final hasText = message.text != null && message.text!.isNotEmpty;
 
+    if (hasVideo) return _buildVideoBubble(hasText);
     if (hasImage && !hasText) return _buildImageOnlyBubble();
     if (hasImage && hasText) return _buildImageCaptionBubble();
     return _buildTextBubble();
+  }
+
+  Widget _buildVideoThumbnail({required double width}) {
+    final thumbUrl = message.videoThumbnailUrl;
+    final isSending = message.status == MessageStatus.sending;
+    return GestureDetector(
+      onTap: isSending ? null : onVideoTap,
+      child: SizedBox(
+        width: width,
+        height: width * 9 / 16,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            if (thumbUrl != null && thumbUrl.isNotEmpty)
+              CachedNetworkImage(
+                imageUrl: thumbUrl,
+                fit: BoxFit.cover,
+                placeholder: (_, __) =>
+                    Container(color: AppColors.surfaceTertiary),
+                errorWidget: (_, __, ___) =>
+                    Container(color: AppColors.surfaceTertiary),
+              )
+            else
+              Container(
+                color: AppColors.surfaceTertiary,
+                child: const Center(
+                  child: Icon(Icons.videocam_rounded,
+                      color: AppColors.textTertiary, size: 40),
+                ),
+              ),
+            if (!isSending)
+              Center(
+                child: Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.9),
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.15),
+                        blurRadius: 10,
+                      ),
+                    ],
+                  ),
+                  child: const Icon(Icons.play_arrow_rounded,
+                      color: AppColors.primary, size: 28),
+                ),
+              ),
+            _uploadOverlay(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildVideoBubble(bool hasText) {
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 260),
+      decoration: _bubbleDecoration(noPadding: true),
+      child: ClipRRect(
+        borderRadius: _bubbleBorderRadius(),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (!isMe && showAvatar)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+                child: _senderName(),
+              ),
+            if (replyToMessage != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+                child: _buildReplyBlock(),
+              ),
+            Stack(
+              children: [
+                _buildVideoThumbnail(width: 260),
+                if (!hasText)
+                  Positioned(
+                    bottom: 6,
+                    right: 8,
+                    child: _overlaidTime(),
+                  ),
+              ],
+            ),
+            if (hasText)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 6, 12, 8),
+                child: _buildTextWithTime(message.text!),
+              ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildReplyBlock() {
@@ -1813,7 +2036,7 @@ class _MessageBubble extends StatelessWidget {
     if (reply == null || onReplyBlockTap == null) return const SizedBox.shrink();
     String preview = reply.text != null && reply.text!.trim().isNotEmpty
         ? reply.text!.trim()
-        : (reply.imageUrl != null ? '📷 Фото' : '—');
+        : (reply.videoUrl != null ? '🎬 Видео' : (reply.imageUrl != null ? '📷 Фото' : '—'));
     final lineColor = isMe ? AppColors.textOnPrimary.withValues(alpha: 0.6) : AppColors.primary.withValues(alpha: 0.85);
     final nameColor = isMe ? AppColors.textOnPrimary.withValues(alpha: 0.85) : AppColors.primary.withValues(alpha: 0.9);
     final textColor = isMe ? AppColors.textOnPrimary.withValues(alpha: 0.65) : AppColors.textSecondary.withValues(alpha: 0.9);

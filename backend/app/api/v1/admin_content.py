@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import re
 import subprocess
@@ -120,7 +121,7 @@ async def upload_video_file(
             str(segment_pattern),
             str(playlist),
         ]
-        proc = subprocess.run(cmd, capture_output=True, text=True)
+        proc = await asyncio.to_thread(subprocess.run, cmd, capture_output=True, text=True)
         if proc.returncode != 0 or not playlist.exists():
             logger.error("ffmpeg failed: %s", proc.stderr)
             raise HTTPException(status_code=500, detail="Video conversion failed")
@@ -140,7 +141,7 @@ async def upload_video_file(
         "2",
         str(thumbnail),
     ]
-    thumb_proc = subprocess.run(thumb_cmd, capture_output=True, text=True)
+    thumb_proc = await asyncio.to_thread(subprocess.run, thumb_cmd, capture_output=True, text=True)
     if thumb_proc.returncode != 0:
         logger.warning("thumbnail generation failed: %s", thumb_proc.stderr)
 
@@ -151,6 +152,36 @@ async def upload_video_file(
         "url": f"{base}/{rel}",
         "filename": playlist.name,
         "thumbnail_url": f"{base}/{thumb_rel}" if thumb_rel else None,
+        "size_bytes": written,
+    }
+
+
+@router.post("/upload-image", response_model=dict)
+async def upload_image_file(
+    file: UploadFile = File(...),
+    _: None = Depends(require_admin),
+):
+    """Upload a preview image (jpg/jpeg/png/webp) for a sub-item thumbnail."""
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Missing filename")
+
+    suffix = Path(file.filename).suffix.lower()
+    allowed = {".jpg", ".jpeg", ".png", ".webp"}
+    if suffix not in allowed:
+        raise HTTPException(status_code=400, detail="Unsupported file format")
+
+    upload_root = Path(settings.hls_upload_dir)
+    folder = _make_upload_folder(upload_root / "images", Path(file.filename).stem)
+
+    target = folder / f"image{suffix}"
+    max_bytes = 20 * 1024 * 1024  # 20 MB max for images
+    written = await _write_upload_file(file, target, max_bytes)
+
+    rel = target.relative_to(upload_root).as_posix()
+    base = settings.hls_public_base_url.rstrip("/")
+    return {
+        "url": f"{base}/{rel}",
+        "filename": target.name,
         "size_bytes": written,
     }
 
@@ -244,6 +275,7 @@ async def admin_create_content(
             title=sub.title,
             description=sub.description,
             url=sub.url,
+            thumbnail_url=sub.thumbnail_url,
             duration=sub.duration,
             sort_order=sub.sort_order if sub.sort_order else i,
         )
@@ -307,6 +339,7 @@ async def admin_update_content(
                 title=sub_in.title,
                 description=sub_in.description,
                 url=sub_in.url,
+                thumbnail_url=sub_in.thumbnail_url,
                 duration=sub_in.duration,
                 sort_order=sub_in.sort_order if sub_in.sort_order else i,
             )

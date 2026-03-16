@@ -48,6 +48,7 @@ class ContentSubItem(Base):
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
     url: Mapped[str | None] = mapped_column(String(2048))  # own video URL
+    thumbnail_url: Mapped[str | None] = mapped_column(String(2048))  # preview image (auto from video or manual upload)
     duration: Mapped[str | None] = mapped_column(String(20))  # e.g. "3:42"
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(

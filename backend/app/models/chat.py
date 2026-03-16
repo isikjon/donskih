@@ -20,6 +20,8 @@ class ChatMessage(Base):
     )
     text: Mapped[str | None] = mapped_column(String(4096), nullable=True)
     image_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    video_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    video_thumbnail_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     group_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     reply_to_message_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),

@@ -7,13 +7,15 @@ class ChatMessage {
   final String? senderPhotoUrl;
   final String? text;
   final String? imageUrl;
+  final String? videoUrl;
+  final String? videoThumbnailUrl;
   final String? groupId;
   final String? replyToMessageId;
   final bool isDeleted;
   final bool isEdited;
   final DateTime createdAt;
   final MessageStatus status;
-  final double? uploadProgress; // 0.0 – 1.0 for image uploads
+  final double? uploadProgress;
 
   const ChatMessage({
     required this.id,
@@ -22,6 +24,8 @@ class ChatMessage {
     this.senderPhotoUrl,
     this.text,
     this.imageUrl,
+    this.videoUrl,
+    this.videoThumbnailUrl,
     this.groupId,
     this.replyToMessageId,
     required this.isDeleted,
@@ -40,6 +44,8 @@ class ChatMessage {
       senderPhotoUrl: json['sender_photo_url'] as String?,
       text: json['text'] as String?,
       imageUrl: json['image_url'] as String?,
+      videoUrl: json['video_url'] as String?,
+      videoThumbnailUrl: json['video_thumbnail_url'] as String?,
       groupId: json['group_id'] as String?,
       replyToMessageId: rawReply != null ? rawReply.toString() : null,
       isDeleted: json['is_deleted'] as bool? ?? false,
@@ -48,6 +54,8 @@ class ChatMessage {
     );
   }
 
+  bool get hasVideo => videoUrl != null && videoUrl!.isNotEmpty;
+
   ChatMessage copyWith({
     String? id,
     String? userId,
@@ -55,6 +63,8 @@ class ChatMessage {
     String? senderPhotoUrl,
     String? text,
     String? imageUrl,
+    String? videoUrl,
+    String? videoThumbnailUrl,
     String? groupId,
     String? replyToMessageId,
     bool? isDeleted,
@@ -64,6 +74,7 @@ class ChatMessage {
     double? uploadProgress,
     bool clearText = false,
     bool clearImageUrl = false,
+    bool clearVideoUrl = false,
     bool clearUploadProgress = false,
   }) {
     return ChatMessage(
@@ -73,6 +84,8 @@ class ChatMessage {
       senderPhotoUrl: senderPhotoUrl ?? this.senderPhotoUrl,
       text: clearText ? null : (text ?? this.text),
       imageUrl: clearImageUrl ? null : (imageUrl ?? this.imageUrl),
+      videoUrl: clearVideoUrl ? null : (videoUrl ?? this.videoUrl),
+      videoThumbnailUrl: videoThumbnailUrl ?? this.videoThumbnailUrl,
       groupId: groupId ?? this.groupId,
       replyToMessageId: replyToMessageId ?? this.replyToMessageId,
       isDeleted: isDeleted ?? this.isDeleted,

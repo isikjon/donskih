@@ -17,8 +17,12 @@ class ContentService {
   }) async {
     try {
       final resp = await http.get(
-        Uri.parse('$apiBase/content?section=$section'),
-        headers: {'Accept': 'application/json'},
+        Uri.parse('$apiBase/content?section=$section&_t=${DateTime.now().millisecondsSinceEpoch}'),
+        headers: {
+          'Accept': 'application/json',
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache',
+        },
       );
       if (resp.statusCode != 200) return null;
       final map = jsonDecode(resp.body) as Map<String, dynamic>;

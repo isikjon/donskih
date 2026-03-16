@@ -6,6 +6,8 @@ import 'dart:typed_data';
 import 'upload_picker.dart';
 
 /// Upload file via XMLHttpRequest with real progress tracking (web only).
+/// Accepts either [bytes] (legacy) or [nativeFile] (preferred for large files —
+/// avoids loading the entire file into Dart memory).
 Future<Map<String, dynamic>?> uploadWithProgressWeb({
   required String url,
   required String fieldName,
@@ -13,11 +15,19 @@ Future<Map<String, dynamic>?> uploadWithProgressWeb({
   required List<int> bytes,
   required Map<String, String> headers,
   void Function(int sent, int total)? onProgress,
+  html.File? nativeFile,
 }) async {
   final completer = Completer<Map<String, dynamic>?>();
   final formData = html.FormData();
-  final blob = html.Blob([Uint8List.fromList(bytes)]);
-  formData.appendBlob(fieldName, blob, filename);
+
+  if (nativeFile != null) {
+    formData.appendBlob(fieldName, nativeFile, filename);
+  } else {
+    final blob = html.Blob([Uint8List.fromList(bytes)]);
+    formData.appendBlob(fieldName, blob, filename);
+  }
+
+  final totalSize = nativeFile?.size ?? bytes.length;
 
   final xhr = html.HttpRequest();
   xhr.open('POST', url);
@@ -25,14 +35,15 @@ Future<Map<String, dynamic>?> uploadWithProgressWeb({
 
   xhr.upload.onProgress.listen((e) {
     if (e.lengthComputable && onProgress != null) {
-      onProgress(e.loaded ?? 0, e.total ?? bytes.length);
+      onProgress(e.loaded ?? 0, e.total ?? totalSize);
     }
   });
 
   xhr.onLoad.listen((_) {
     if (xhr.status == 200) {
       try {
-        completer.complete(jsonDecode(xhr.responseText ?? '{}') as Map<String, dynamic>);
+        completer.complete(
+            jsonDecode(xhr.responseText ?? '{}') as Map<String, dynamic>);
       } catch (e) {
         completer.completeError('Ошибка парсинга ответа: $e');
       }
@@ -45,8 +56,32 @@ Future<Map<String, dynamic>?> uploadWithProgressWeb({
     completer.completeError('Ошибка сети при загрузке');
   });
 
+  xhr.onAbort.listen((_) {
+    completer.completeError('Загрузка отменена');
+  });
+
   xhr.send(formData);
   return completer.future;
+}
+
+/// Upload a large file by passing the native html.File directly to XHR,
+/// without reading it into Dart memory. Returns the parsed JSON response.
+Future<Map<String, dynamic>?> uploadNativeFileWithProgress({
+  required String url,
+  required String fieldName,
+  required html.File nativeFile,
+  required Map<String, String> headers,
+  void Function(int sent, int total)? onProgress,
+}) {
+  return uploadWithProgressWeb(
+    url: url,
+    fieldName: fieldName,
+    filename: nativeFile.name,
+    bytes: const [],
+    headers: headers,
+    onProgress: onProgress,
+    nativeFile: nativeFile,
+  );
 }
 
 Future<UploadPickResult?> pickVideoFileImpl() async {
@@ -55,6 +90,16 @@ Future<UploadPickResult?> pickVideoFileImpl() async {
 
 Future<UploadPickResult?> pickPdfFileImpl() async {
   return _pickFileImpl('.pdf,application/pdf');
+}
+
+/// Pick a video file and return the native html.File handle (no memory read).
+Future<html.File?> pickVideoFileNative() async {
+  final input = html.FileUploadInputElement()
+    ..accept = '.mp4,.mov,.m4v,.mkv,.webm,.m3u8'
+    ..multiple = false;
+  input.click();
+  await input.onChange.first;
+  return input.files?.isNotEmpty == true ? input.files!.first : null;
 }
 
 Future<UploadPickResult?> _pickFileImpl(String accept) async {

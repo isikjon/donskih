@@ -9,6 +9,7 @@ class ContentSubItemOut(BaseModel):
     title: str
     description: str | None = None
     url: str | None = None
+    thumbnail_url: str | None = None
     duration: str | None = None
     sort_order: int = 0
 
@@ -19,6 +20,7 @@ class ContentSubItemIn(BaseModel):
     title: str = Field(..., max_length=500)
     description: str | None = Field(None, max_length=10000)
     url: str | None = Field(None, max_length=2048)
+    thumbnail_url: str | None = Field(None, max_length=2048)
     duration: str | None = Field(None, max_length=20)
     sort_order: int = 0
 
@@ -74,6 +76,7 @@ def content_item_to_out(item) -> ContentItemOut:
                 title=s.title,
                 description=s.description,
                 url=s.url,
+                thumbnail_url=s.thumbnail_url,
                 duration=s.duration,
                 sort_order=s.sort_order,
             )

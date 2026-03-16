@@ -11,6 +11,8 @@ class ChatMessageOut(BaseModel):
     sender_photo_url: str | None
     text: str | None
     image_url: str | None
+    video_url: str | None = None
+    video_thumbnail_url: str | None = None
     group_id: str | None
     reply_to_message_id: str | None = None
     is_edited: bool
@@ -23,6 +25,8 @@ class ChatMessageOut(BaseModel):
 class SendMessageRequest(BaseModel):
     text: str | None = None
     image_url: str | None = None
+    video_url: str | None = None
+    video_thumbnail_url: str | None = None
     group_id: str | None = None
     reply_to_message_id: str | None = None
 
@@ -33,3 +37,9 @@ class EditMessageRequest(BaseModel):
 
 class ImageUploadResponse(BaseModel):
     image_url: str
+
+
+class VideoUploadResponse(BaseModel):
+    video_url: str
+    thumbnail_url: str | None = None
+    duration_sec: float | None = None

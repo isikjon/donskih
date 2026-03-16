@@ -8,6 +8,7 @@ import '../../../core/services/chat_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../components/app_avatar.dart';
+import '../video/video_player_screen.dart';
 
 /// Full-screen version of the community chat (accessible via route /chat-room).
 /// Uses the same ChatService singleton — safe to open while ChatTab is active.
@@ -450,7 +451,53 @@ class _RoomBubble extends StatelessWidget {
                             style: AppTypography.labelSmall
                                 .copyWith(color: AppColors.primary)),
                       ),
-                    if (message.imageUrl != null)
+                    if (message.hasVideo)
+                      GestureDetector(
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => VideoPlayerScreen(
+                              videoUrl: message.videoUrl!,
+                              title: message.senderName,
+                            ),
+                          ),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: SizedBox(
+                            width: 240,
+                            height: 135,
+                            child: Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                if (message.videoThumbnailUrl != null)
+                                  CachedNetworkImage(
+                                    imageUrl: message.videoThumbnailUrl!,
+                                    fit: BoxFit.cover,
+                                    placeholder: (_, __) => Container(
+                                        color: AppColors.surfaceTertiary),
+                                    errorWidget: (_, __, ___) => Container(
+                                        color: AppColors.surfaceTertiary),
+                                  )
+                                else
+                                  Container(color: AppColors.surfaceTertiary),
+                                Center(
+                                  child: Container(
+                                    width: 44,
+                                    height: 44,
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withValues(alpha: 0.9),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(Icons.play_arrow_rounded,
+                                        color: AppColors.primary, size: 26),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      )
+                    else if (message.imageUrl != null)
                       ClipRRect(
                         borderRadius: BorderRadius.circular(12),
                         child: CachedNetworkImage(

@@ -5,6 +5,7 @@ class ContentSubItemDto {
   final String title;
   final String? description;
   final String? url;
+  final String? thumbnailUrl;
   final String? duration;
   final int sortOrder;
 
@@ -13,6 +14,7 @@ class ContentSubItemDto {
     required this.title,
     this.description,
     this.url,
+    this.thumbnailUrl,
     this.duration,
     this.sortOrder = 0,
   });
@@ -23,6 +25,7 @@ class ContentSubItemDto {
       title: json['title'] as String,
       description: json['description'] as String?,
       url: json['url'] as String?,
+      thumbnailUrl: json['thumbnail_url'] as String?,
       duration: json['duration'] as String?,
       sortOrder: (json['sort_order'] as num?)?.toInt() ?? 0,
     );

@@ -343,6 +343,35 @@ class AdminApiService {
     }
   }
 
+  /// Upload video using the native file handle (web-only, zero-copy streaming).
+  /// For large files this avoids reading the entire file into Dart memory.
+  Future<Map<String, dynamic>?> uploadVideoNative(
+    String? adminKey, {
+    required Object nativeFile,
+    void Function(int sent, int total)? onUploadProgress,
+  }) async {
+    lastError = null;
+    if (adminKey == null || adminKey.isEmpty) {
+      lastError = 'Нет ключа администратора';
+      return null;
+    }
+    try {
+      return await uploadNativeFile(
+        url: '$apiBase/admin/content/upload-video',
+        fieldName: 'file',
+        nativeFile: nativeFile,
+        headers: {
+          'X-Admin-Key': adminKey,
+          'Accept': 'application/json',
+        },
+        onProgress: onUploadProgress,
+      );
+    } catch (e) {
+      lastError = e.toString();
+      return null;
+    }
+  }
+
   Future<Map<String, dynamic>?> uploadChecklistBytes(
     String? adminKey, {
     required String filename,
