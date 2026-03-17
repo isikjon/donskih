@@ -808,115 +808,114 @@ class _SubLessonCarouselState extends State<_SubLessonCarousel> {
                   final hasDescription = sub.description != null &&
                       sub.description!.trim().isNotEmpty;
 
-                  return SingleChildScrollView(
-                    physics: const BouncingScrollPhysics(),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const SizedBox(height: 12),
-                          Text(sub.title,
-                              style: AppTypography.titleSmall
-                                  .copyWith(fontWeight: FontWeight.w600),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis),
-                          const SizedBox(height: 8),
-                          GestureDetector(
-                            onTap: canPlay
-                                ? () => widget.onPlaySubLesson(sub)
-                                : null,
-                            child: AspectRatio(
-                              aspectRatio: 9 / 16,
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  color: AppColors.surfaceSecondary,
-                                  borderRadius: BorderRadius.circular(14),
-                                ),
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(14),
-                                  child: Stack(
-                                    fit: StackFit.expand,
-                                    children: [
-                                      if (thumbUrl != null)
-                                        CachedNetworkImage(
-                                          imageUrl: thumbUrl,
-                                          fit: BoxFit.cover,
-                                          placeholder: (_, __) => Container(
-                                              color:
-                                                  AppColors.surfaceSecondary),
-                                          errorWidget: (_, __, ___) =>
-                                              const SizedBox(),
-                                        ),
-                                      Container(
-                                        color: Colors.black.withValues(
-                                            alpha:
-                                                thumbUrl != null ? 0.15 : 0),
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SizedBox(height: 12),
+                        Text(sub.title,
+                            style: AppTypography.titleSmall
+                                .copyWith(fontWeight: FontWeight.w600),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis),
+                        const SizedBox(height: 8),
+                        GestureDetector(
+                          onTap: canPlay
+                              ? () => widget.onPlaySubLesson(sub)
+                              : null,
+                          child: AspectRatio(
+                            aspectRatio: 9 / 16,
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: AppColors.surfaceSecondary,
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(14),
+                                child: Stack(
+                                  fit: StackFit.expand,
+                                  children: [
+                                    if (thumbUrl != null)
+                                      CachedNetworkImage(
+                                        imageUrl: thumbUrl,
+                                        fit: BoxFit.cover,
+                                        placeholder: (_, __) => Container(
+                                            color:
+                                                AppColors.surfaceSecondary),
+                                        errorWidget: (_, __, ___) =>
+                                            const SizedBox(),
                                       ),
-                                      Center(
+                                    Container(
+                                      color: Colors.black.withValues(
+                                          alpha:
+                                              thumbUrl != null ? 0.15 : 0),
+                                    ),
+                                    Center(
+                                      child: Container(
+                                        width: 56,
+                                        height: 56,
+                                        decoration: BoxDecoration(
+                                          color: Colors.white
+                                              .withValues(alpha: 0.9),
+                                          shape: BoxShape.circle,
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: Colors.black
+                                                  .withValues(alpha: 0.15),
+                                              blurRadius: 12,
+                                            ),
+                                          ],
+                                        ),
+                                        child: Icon(
+                                          Icons.play_arrow_rounded,
+                                          color: canPlay
+                                              ? AppColors.primary
+                                              : AppColors.textTertiary,
+                                          size: 32,
+                                        ),
+                                      ),
+                                    ),
+                                    if (sub.duration.isNotEmpty)
+                                      Positioned(
+                                        bottom: 10,
+                                        right: 10,
                                         child: Container(
-                                          width: 56,
-                                          height: 56,
+                                          padding:
+                                              const EdgeInsets.symmetric(
+                                                  horizontal: 10,
+                                                  vertical: 4),
                                           decoration: BoxDecoration(
-                                            color: Colors.white
-                                                .withValues(alpha: 0.9),
-                                            shape: BoxShape.circle,
-                                            boxShadow: [
-                                              BoxShadow(
-                                                color: Colors.black
-                                                    .withValues(alpha: 0.15),
-                                                blurRadius: 12,
-                                              ),
-                                            ],
+                                            color: Colors.black54,
+                                            borderRadius:
+                                                BorderRadius.circular(8),
                                           ),
-                                          child: Icon(
-                                            Icons.play_arrow_rounded,
-                                            color: canPlay
-                                                ? AppColors.primary
-                                                : AppColors.textTertiary,
-                                            size: 32,
+                                          child: Text(
+                                            sub.duration,
+                                            style: AppTypography.labelSmall
+                                                .copyWith(
+                                                    color: Colors.white),
                                           ),
                                         ),
                                       ),
-                                      if (sub.duration.isNotEmpty)
-                                        Positioned(
-                                          bottom: 10,
-                                          right: 10,
-                                          child: Container(
-                                            padding:
-                                                const EdgeInsets.symmetric(
-                                                    horizontal: 10,
-                                                    vertical: 4),
-                                            decoration: BoxDecoration(
-                                              color: Colors.black54,
-                                              borderRadius:
-                                                  BorderRadius.circular(8),
-                                            ),
-                                            child: Text(
-                                              sub.duration,
-                                              style: AppTypography.labelSmall
-                                                  .copyWith(
-                                                      color: Colors.white),
-                                            ),
-                                          ),
-                                        ),
-                                    ],
-                                  ),
+                                  ],
                                 ),
                               ),
                             ),
                           ),
-                          if (hasDescription) ...[
-                            const SizedBox(height: 10),
-                            RichDescriptionViewer(
+                        ),
+                        if (hasDescription) ...[
+                          const SizedBox(height: 10),
+                          Expanded(
+                            child: RichDescriptionViewer(
                               subtitle: sub.description!,
                               textStyle: AppTypography.bodySmall
                                   .copyWith(color: AppColors.textSecondary),
                             ),
-                          ],
+                          ),
                         ],
-                      ),
+                      ],
                     ),
                   );
                 },
