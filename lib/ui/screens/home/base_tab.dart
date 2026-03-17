@@ -502,7 +502,7 @@ class _BaseSubLessonCarouselState extends State<_BaseSubLessonCarousel> {
         .toString();
   }
 
-  static const _descAreaHeight = 140.0;
+  static const _descAreaHeight = 180.0;
 
   @override
   Widget build(BuildContext context) {
@@ -634,10 +634,25 @@ class _BaseSubLessonCarouselState extends State<_BaseSubLessonCarousel> {
                       if (hasDescription) ...[
                         const SizedBox(height: 10),
                         Expanded(
-                          child: RichDescriptionViewer(
-                            subtitle: sub.description!,
-                            textStyle: AppTypography.bodySmall
-                                .copyWith(color: AppColors.textSecondary),
+                          child: ShaderMask(
+                            shaderCallback: (bounds) => LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: const [Colors.white, Colors.white, Colors.white, Colors.transparent],
+                              stops: const [0.0, 0.7, 0.85, 1.0],
+                            ).createShader(bounds),
+                            blendMode: BlendMode.dstIn,
+                            child: SingleChildScrollView(
+                              physics: const ClampingScrollPhysics(),
+                              child: Padding(
+                                padding: const EdgeInsets.only(bottom: 16),
+                                child: RichDescriptionViewer(
+                                  subtitle: sub.description!,
+                                  textStyle: AppTypography.bodySmall
+                                      .copyWith(color: AppColors.textSecondary),
+                                ),
+                              ),
+                            ),
                           ),
                         ),
                       ],
