@@ -30,10 +30,19 @@ class _SubItemFormData {
   bool isConverting;
   String? conversionTaskId;
 
+  // Image (photo) upload fields
+  String imageUrl;
+  String? imageUploadedFilename;
+  String imageUploadStatus; // idle | uploading | success | error
+  double imageUploadProgress;
+  String? imageUploadError;
+  bool isImageUploading;
+
   _SubItemFormData({
     String? title,
     String? description,
     String? url,
+    String? imageUrlInit,
   })  : titleController = TextEditingController(text: title ?? ''),
         quillFocusNode = FocusNode(),
         videoUrl = url ?? '',
@@ -45,15 +54,26 @@ class _SubItemFormData {
         videoUploadError = null,
         isUploading = false,
         isConverting = false,
-        conversionTaskId = null {
+        conversionTaskId = null,
+        imageUrl = imageUrlInit ?? '',
+        imageUploadedFilename = null,
+        imageUploadStatus =
+            imageUrlInit != null && imageUrlInit.isNotEmpty ? 'success' : 'idle',
+        imageUploadProgress = 0.0,
+        imageUploadError = null,
+        isImageUploading = false {
     if (url != null && url.isNotEmpty) {
       final segs = Uri.tryParse(url)?.pathSegments;
       uploadedFilename = (segs != null && segs.isNotEmpty) ? segs.last : null;
-      // Derive thumbnail URL from HLS URL
       if (url.endsWith('/index.m3u8')) {
         thumbnailUrl =
             url.replaceFirst(RegExp(r'/index\.m3u8$'), '/thumb.jpg');
       }
+    }
+    if (imageUrlInit != null && imageUrlInit.isNotEmpty) {
+      final segs = Uri.tryParse(imageUrlInit)?.pathSegments;
+      imageUploadedFilename =
+          (segs != null && segs.isNotEmpty) ? segs.last : null;
     }
     _initQuill(description);
   }
@@ -175,6 +195,7 @@ class _AdminContentEditScreenState extends State<AdminContentEditScreen> {
             title: m['title'] as String?,
             description: m['description'] as String?,
             url: m['url'] as String?,
+            imageUrlInit: m['thumbnail_url'] as String?,
           ));
         }
       }
@@ -414,6 +435,81 @@ class _AdminContentEditScreenState extends State<AdminContentEditScreen> {
   }
 
   // -----------------------------------------------------------------------
+  // Image upload per sub-item
+  // -----------------------------------------------------------------------
+
+  Future<void> _uploadSubItemImage(int index) async {
+    final form = _subItemForms[index];
+    try {
+      _adminKey ??= await _api.getAdminKey();
+      if (_adminKey == null || _adminKey!.isEmpty) {
+        setState(() => _error = 'Нет ключа администратора');
+        return;
+      }
+
+      final picked = await pickImageFile();
+      if (picked == null) return;
+
+      setState(() {
+        form.isImageUploading = true;
+        form.imageUploadStatus = 'uploading';
+        form.imageUploadProgress = 0.0;
+        form.imageUploadError = null;
+        _error = null;
+      });
+
+      final uploaded = await _api.uploadImageBytes(
+        _adminKey,
+        filename: picked.name,
+        bytes: picked.bytes,
+        onUploadProgress: (sent, total) {
+          if (!mounted || total <= 0) return;
+          setState(() {
+            form.imageUploadProgress = (sent / total).clamp(0.0, 1.0);
+          });
+        },
+      );
+
+      if (!mounted) return;
+
+      if (uploaded == null) {
+        setState(() {
+          form.isImageUploading = false;
+          form.imageUploadStatus = 'error';
+          form.imageUploadError = _api.lastError ?? 'Ошибка загрузки фото';
+        });
+        return;
+      }
+
+      setState(() {
+        form.isImageUploading = false;
+        form.imageUrl = uploaded['url'] as String? ?? '';
+        form.imageUploadedFilename = uploaded['filename'] as String?;
+        form.imageUploadStatus = 'success';
+        form.imageUploadProgress = 1.0;
+        form.imageUploadError = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        form.isImageUploading = false;
+        form.imageUploadStatus = 'error';
+        form.imageUploadError = 'Ошибка выбора файла: $e';
+      });
+    }
+  }
+
+  void _retrySubItemImageUpload(int index) {
+    final form = _subItemForms[index];
+    setState(() {
+      form.imageUploadStatus = 'idle';
+      form.imageUploadError = null;
+      form.imageUploadProgress = 0.0;
+    });
+    _uploadSubItemImage(index);
+  }
+
+  // -----------------------------------------------------------------------
   // Checklist upload (unchanged logic)
   // -----------------------------------------------------------------------
 
@@ -526,6 +622,8 @@ class _AdminContentEditScreenState extends State<AdminContentEditScreen> {
           'title': f.titleController.text.trim(),
           'description': f.descriptionJson,
           'url': f.videoUrl.trim().isEmpty ? null : f.videoUrl.trim(),
+          'thumbnail_url':
+              f.imageUrl.trim().isEmpty ? null : f.imageUrl.trim(),
           'sort_order': entry.key,
         };
       }).toList();
@@ -567,7 +665,7 @@ class _AdminContentEditScreenState extends State<AdminContentEditScreen> {
   @override
   Widget build(BuildContext context) {
     final anyUploading =
-        _subItemForms.any((f) => f.isUploading || f.isConverting) ||
+        _subItemForms.any((f) => f.isUploading || f.isConverting || f.isImageUploading) ||
             _checklistUploading;
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -734,6 +832,10 @@ class _AdminContentEditScreenState extends State<AdminContentEditScreen> {
                         _uploadSubItemVideo(entry.key),
                     onRetryUpload: () =>
                         _retrySubItemVideoUpload(entry.key),
+                    onUploadImage: () =>
+                        _uploadSubItemImage(entry.key),
+                    onRetryImageUpload: () =>
+                        _retrySubItemImageUpload(entry.key),
                   ),
                 );
               }),
@@ -769,6 +871,8 @@ class _SubItemBlock extends StatelessWidget {
   final bool isSaving;
   final VoidCallback onUploadVideo;
   final VoidCallback onRetryUpload;
+  final VoidCallback onUploadImage;
+  final VoidCallback onRetryImageUpload;
 
   const _SubItemBlock({
     required this.index,
@@ -776,6 +880,8 @@ class _SubItemBlock extends StatelessWidget {
     required this.isSaving,
     required this.onUploadVideo,
     required this.onRetryUpload,
+    required this.onUploadImage,
+    required this.onRetryImageUpload,
   });
 
   @override
@@ -870,6 +976,18 @@ class _SubItemBlock extends StatelessWidget {
                   videoUrl: form.videoUrl,
                   onUpload: onUploadVideo,
                   onRetry: onRetryUpload,
+                ),
+                const SizedBox(height: 14),
+                _ImageUploadBlock(
+                  isUploading: form.isImageUploading,
+                  isSaving: isSaving,
+                  uploadStatus: form.imageUploadStatus,
+                  uploadProgress: form.imageUploadProgress,
+                  uploadError: form.imageUploadError,
+                  uploadedFilename: form.imageUploadedFilename,
+                  imageUrl: form.imageUrl,
+                  onUpload: onUploadImage,
+                  onRetry: onRetryImageUpload,
                 ),
               ],
             ),
@@ -1186,6 +1304,227 @@ class _VideoUploadBlock extends StatelessWidget {
                 const SizedBox(height: 10),
                 TextButton.icon(
                   onPressed: isBusy ? null : onRetry,
+                  icon: const Icon(Icons.refresh, size: 18),
+                  label: const Text('Повторить загрузку'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppColors.error,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Image upload block with progress, success and error states
+// ---------------------------------------------------------------------------
+
+class _ImageUploadBlock extends StatelessWidget {
+  final bool isUploading;
+  final bool isSaving;
+  final String uploadStatus; // idle | uploading | success | error
+  final double uploadProgress;
+  final String? uploadError;
+  final String? uploadedFilename;
+  final String imageUrl;
+  final VoidCallback onUpload;
+  final VoidCallback onRetry;
+
+  const _ImageUploadBlock({
+    required this.isUploading,
+    required this.isSaving,
+    required this.uploadStatus,
+    required this.uploadProgress,
+    this.uploadError,
+    this.uploadedFilename,
+    required this.imageUrl,
+    required this.onUpload,
+    required this.onRetry,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final showUploadProgress = uploadStatus == 'uploading';
+    final showSuccess = uploadStatus == 'success';
+    final showError = uploadStatus == 'error';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            FilledButton.icon(
+              onPressed: (isUploading || isSaving) ? null : onUpload,
+              icon: isUploading
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppColors.textOnPrimary,
+                      ),
+                    )
+                  : const Icon(Icons.image_outlined),
+              label: Text(
+                isUploading ? 'Загрузка...' : 'Загрузить фото',
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                uploadedFilename ??
+                    (imageUrl.isEmpty ? 'Фото не загружено' : imageUrl),
+                style: AppTypography.bodySmall.copyWith(
+                  color: AppColors.textSecondary,
+                ),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 2,
+              ),
+            ),
+          ],
+        ),
+        if (showUploadProgress) ...[
+          const SizedBox(height: 12),
+          LinearProgressIndicator(
+            value: uploadProgress,
+            backgroundColor: AppColors.border,
+            valueColor:
+                const AlwaysStoppedAnimation<Color>(AppColors.primary),
+            minHeight: 6,
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Text(
+                '${(uploadProgress * 100).round()}%',
+                style: AppTypography.labelSmall.copyWith(
+                  color: AppColors.primary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Загрузка фото на сервер...',
+                style: AppTypography.bodySmall.copyWith(
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ],
+          ),
+        ],
+        if (showSuccess) ...[
+          const SizedBox(height: 12),
+          Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: AppColors.success.withValues(alpha: 0.12),
+              borderRadius:
+                  BorderRadius.circular(AppSpacing.radiusMedium),
+              border: Border.all(
+                color: AppColors.success.withValues(alpha: 0.4),
+                width: 1,
+              ),
+            ),
+            child: Row(
+              children: [
+                if (imageUrl.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 12),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.network(
+                        imageUrl,
+                        width: 80,
+                        height: 80,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Container(
+                          width: 80,
+                          height: 80,
+                          color: AppColors.surfaceSecondary,
+                          child: const Icon(Icons.image,
+                              color: AppColors.textTertiary, size: 32),
+                        ),
+                      ),
+                    ),
+                  ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.check_circle,
+                              color: AppColors.success, size: 22),
+                          const SizedBox(width: 10),
+                          Text(
+                            'Фото загружено',
+                            style: AppTypography.bodyMedium.copyWith(
+                              color: AppColors.success,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (uploadedFilename != null) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          uploadedFilename!,
+                          style: AppTypography.bodySmall.copyWith(
+                            color: AppColors.textTertiary,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+        if (showError) ...[
+          const SizedBox(height: 12),
+          Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: AppColors.error.withValues(alpha: 0.1),
+              borderRadius:
+                  BorderRadius.circular(AppSpacing.radiusMedium),
+              border: Border.all(
+                color: AppColors.error.withValues(alpha: 0.35),
+                width: 1,
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.error_outline,
+                        color: AppColors.error, size: 22),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        uploadError ?? 'Ошибка загрузки фото.',
+                        style: AppTypography.bodySmall.copyWith(
+                          color: AppColors.error,
+                        ),
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                TextButton.icon(
+                  onPressed: isUploading ? null : onRetry,
                   icon: const Icon(Icons.refresh, size: 18),
                   label: const Text('Повторить загрузку'),
                   style: TextButton.styleFrom(

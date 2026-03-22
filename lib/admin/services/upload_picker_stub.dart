@@ -8,6 +8,10 @@ Future<UploadPickResult?> pickPdfFileImpl() async {
   throw UnsupportedError('PDF picker is available only in web admin');
 }
 
+Future<UploadPickResult?> pickImageFileImpl() async {
+  throw UnsupportedError('Image picker is available only in web admin');
+}
+
 Future<Map<String, dynamic>?> uploadWithProgressWeb({
   required String url,
   required String fieldName,

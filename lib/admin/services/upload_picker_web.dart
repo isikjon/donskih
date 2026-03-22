@@ -92,6 +92,10 @@ Future<UploadPickResult?> pickPdfFileImpl() async {
   return _pickFileImpl('.pdf,application/pdf');
 }
 
+Future<UploadPickResult?> pickImageFileImpl() async {
+  return _pickFileImpl('.jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp');
+}
+
 /// Pick a video file and return the native html.File handle (no memory read).
 Future<html.File?> pickVideoFileNative() async {
   final input = html.FileUploadInputElement()

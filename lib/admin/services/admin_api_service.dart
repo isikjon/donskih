@@ -398,6 +398,63 @@ class AdminApiService {
     }
   }
 
+  Future<Map<String, dynamic>?> uploadImageBytes(
+    String? adminKey, {
+    required String filename,
+    required List<int> bytes,
+    void Function(int sent, int total)? onUploadProgress,
+  }) async {
+    lastError = null;
+    if (adminKey == null || adminKey.isEmpty) {
+      lastError = 'Нет ключа администратора';
+      return null;
+    }
+    if (bytes.isEmpty) {
+      lastError = 'Файл не прочитан';
+      return null;
+    }
+
+    try {
+      if (kIsWeb) {
+        return await uploadFileWithProgress(
+          url: '$apiBase/admin/content/upload-image',
+          fieldName: 'file',
+          filename: filename,
+          bytes: bytes,
+          headers: {
+            'X-Admin-Key': adminKey,
+            'Accept': 'application/json',
+          },
+          onProgress: onUploadProgress,
+        );
+      }
+
+      final uri = Uri.parse('$apiBase/admin/content/upload-image');
+      final request = http.MultipartRequest('POST', uri);
+      request.headers['X-Admin-Key'] = adminKey;
+      request.headers['Accept'] = 'application/json';
+      request.files.add(
+        http.MultipartFile.fromBytes('file', bytes, filename: filename),
+      );
+
+      final client = http.Client();
+      try {
+        final streamed = await client.send(request);
+        final resp = await http.Response.fromStream(streamed);
+        if (resp.statusCode != 200) {
+          lastError = _errorFromResponse(resp);
+          return null;
+        }
+        return jsonDecode(resp.body) as Map<String, dynamic>;
+      } finally {
+        client.close();
+      }
+    } catch (e) {
+      lastError = e.toString();
+      return null;
+    }
+  }
+
   Future<Map<String, dynamic>?> uploadChecklistBytes(
     String? adminKey, {
     required String filename,

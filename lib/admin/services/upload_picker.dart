@@ -15,6 +15,7 @@ class UploadPickResult {
 
 Future<UploadPickResult?> pickVideoFile() => pickVideoFileImpl();
 Future<UploadPickResult?> pickPdfFile() => pickPdfFileImpl();
+Future<UploadPickResult?> pickImageFile() => pickImageFileImpl();
 
 /// Web-only upload with real XHR progress. On non-web throws.
 Future<Map<String, dynamic>?> uploadFileWithProgress({
