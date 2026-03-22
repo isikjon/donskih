@@ -144,55 +144,52 @@ class _ContentTabState extends State<ContentTab> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
-          child: Text('Главная', style: AppTypography.headlineSmall),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: _contentByDate != null && _contentByDate!.isNotEmpty
-              ? _ProgramBlockFromApi(
-                  contentByDate: _contentByDate!,
-                  onItemTap: (id) {
-                    final key = _sectionKeys[id];
-                    if (key != null) _scrollToSection(key);
-                  },
-                )
-              : _ProgramBlock(onItemTap: (_) {}),
-        ),
-        const SizedBox(height: 12),
-        Expanded(
-          child: RefreshIndicator(
-            onRefresh: _refreshContent,
-            color: AppColors.primary,
-            child: _loading
-                ? ListView(
-                    physics: _refreshPhysics,
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    children: const [
-                      SizedBox(height: 120),
-                      Center(
-                        child:
-                            CircularProgressIndicator(color: AppColors.primary),
-                      ),
-                      SizedBox(height: 400),
-                    ],
-                  )
-                : _contentByDate != null && _contentByDate!.isNotEmpty
-                    ? _buildContentFromApi()
-                    : _buildMockContent(),
-          ),
-        ),
-      ],
+    return RefreshIndicator(
+      onRefresh: _refreshContent,
+      color: AppColors.primary,
+      child: _loading
+          ? ListView(
+              physics: _refreshPhysics,
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text('Главная', style: AppTypography.headlineSmall),
+                ),
+                const SizedBox(height: 100),
+                const Center(
+                  child:
+                      CircularProgressIndicator(color: AppColors.primary),
+                ),
+                const SizedBox(height: 400),
+              ],
+            )
+          : _contentByDate != null && _contentByDate!.isNotEmpty
+              ? _buildContentFromApi()
+              : _buildMockContent(),
     );
   }
 
   Widget _buildContentFromApi() {
     final dates = _contentByDate!.keys.toList()..sort((a, b) => a.compareTo(b));
     final list = <Widget>[];
+
+    list.add(Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Text('Главная', style: AppTypography.headlineSmall),
+    ));
+
+    list.add(Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: _ProgramBlockFromApi(
+        contentByDate: _contentByDate!,
+        onItemTap: (id) {
+          final key = _sectionKeys[id];
+          if (key != null) _scrollToSection(key);
+        },
+      ),
+    ));
+
     for (final dateIso in dates) {
       final items = _contentByDate![dateIso]!;
       final dateLabel = ContentItemDto.formatDisplayDate(dateIso);
@@ -265,6 +262,14 @@ class _ContentTabState extends State<ContentTab> {
       physics: _refreshPhysics,
       padding: const EdgeInsets.symmetric(horizontal: 20),
       children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Text('Главная', style: AppTypography.headlineSmall),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: _ProgramBlock(onItemTap: (_) {}),
+        ),
         _DateLabel('06 февраля'),
         const SizedBox(height: 8),
         _ExpandableLessonCard(
