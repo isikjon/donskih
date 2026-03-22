@@ -25,14 +25,22 @@ class _ContentTabState extends State<ContentTab> {
 
   final _bookmarkService = BookmarkService();
   final _bookmarks = <String, bool>{};
+  final _scrollController = ScrollController();
   Map<String, List<ContentItemDto>>? _contentByDate;
   bool _loading = true;
+  bool _initialScrollDone = false;
   final _sectionKeys = <String, GlobalKey>{};
 
   @override
   void initState() {
     super.initState();
     _loadContent();
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadContent() async {
@@ -50,6 +58,14 @@ class _ContentTabState extends State<ContentTab> {
       }
       _loading = false;
     });
+    if (!_initialScrollDone) {
+      _initialScrollDone = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_scrollController.hasClients) {
+          _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+        }
+      });
+    }
   }
 
   Future<void> _refreshContent() async {
@@ -240,6 +256,7 @@ class _ContentTabState extends State<ContentTab> {
     }
     list.add(const SizedBox(height: 100));
     return ListView(
+      controller: _scrollController,
       physics: _refreshPhysics,
       padding: const EdgeInsets.symmetric(horizontal: 20),
       children: list,
@@ -259,6 +276,7 @@ class _ContentTabState extends State<ContentTab> {
       _sectionKeys[e.key] = e.value;
     }
     return ListView(
+      controller: _scrollController,
       physics: _refreshPhysics,
       padding: const EdgeInsets.symmetric(horizontal: 20),
       children: [
