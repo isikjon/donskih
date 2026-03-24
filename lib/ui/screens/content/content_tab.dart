@@ -652,19 +652,21 @@ class _ExpandableLessonCardState extends State<_ExpandableLessonCard>
                                 color: AppColors.surfaceSecondary,
                               ),
                             ),
-                            Container(
-                              color: Colors.black.withValues(alpha: 0.2),
-                            ),
-                            Center(
-                              child: Icon(
-                                Icons.play_circle_filled_rounded,
-                                color: widget.canPlay
-                                    ? Colors.white
-                                    : AppColors.textTertiary
-                                        .withValues(alpha: 0.45),
-                                size: 28,
+                            if (contentThumbnailIsVideoPosterFrame(thumbUrl))
+                              Container(
+                                color: Colors.black.withValues(alpha: 0.2),
                               ),
-                            ),
+                            if (contentThumbnailIsVideoPosterFrame(thumbUrl))
+                              Center(
+                                child: Icon(
+                                  Icons.play_circle_filled_rounded,
+                                  color: widget.canPlay
+                                      ? Colors.white
+                                      : AppColors.textTertiary
+                                          .withValues(alpha: 0.45),
+                                  size: 28,
+                                ),
+                              ),
                           ],
                         ),
                       ),
@@ -874,36 +876,41 @@ class _SubLessonCarouselState extends State<_SubLessonCarousel> {
                                         errorWidget: (_, __, ___) =>
                                             const SizedBox(),
                                       ),
-                                    Container(
-                                      color: Colors.black.withValues(
-                                          alpha:
-                                              thumbUrl != null ? 0.15 : 0),
-                                    ),
-                                    Center(
-                                      child: Container(
-                                        width: 56,
-                                        height: 56,
-                                        decoration: BoxDecoration(
-                                          color: Colors.white
-                                              .withValues(alpha: 0.9),
-                                          shape: BoxShape.circle,
-                                          boxShadow: [
-                                            BoxShadow(
-                                              color: Colors.black
-                                                  .withValues(alpha: 0.15),
-                                              blurRadius: 12,
-                                            ),
-                                          ],
-                                        ),
-                                        child: Icon(
-                                          Icons.play_arrow_rounded,
-                                          color: canPlay
-                                              ? AppColors.primary
-                                              : AppColors.textTertiary,
-                                          size: 32,
+                                    if (contentThumbnailIsVideoPosterFrame(
+                                        thumbUrl))
+                                      Container(
+                                        color: Colors.black.withValues(
+                                            alpha: thumbUrl != null
+                                                ? 0.15
+                                                : 0),
+                                      ),
+                                    if (contentThumbnailIsVideoPosterFrame(
+                                        thumbUrl))
+                                      Center(
+                                        child: Container(
+                                          width: 56,
+                                          height: 56,
+                                          decoration: BoxDecoration(
+                                            color: Colors.white
+                                                .withValues(alpha: 0.9),
+                                            shape: BoxShape.circle,
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: Colors.black
+                                                    .withValues(alpha: 0.15),
+                                                blurRadius: 12,
+                                              ),
+                                            ],
+                                          ),
+                                          child: Icon(
+                                            Icons.play_arrow_rounded,
+                                            color: canPlay
+                                                ? AppColors.primary
+                                                : AppColors.textTertiary,
+                                            size: 32,
+                                          ),
                                         ),
                                       ),
-                                    ),
                                     if (sub.duration.isNotEmpty)
                                       Positioned(
                                         bottom: 10,

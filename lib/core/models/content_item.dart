@@ -109,3 +109,11 @@ class ContentItemDto {
     return '$day ${months[month]}';
   }
 }
+
+/// Whether the thumbnail is the ffmpeg poster next to HLS (`thumb.jpg`).
+/// Custom uploaded lesson covers (jpg/png/webp under `/images/` etc.) return false
+/// so the UI does not show a video play icon on a static photo.
+bool contentThumbnailIsVideoPosterFrame(String? url) {
+  if (url == null || url.trim().isEmpty) return true;
+  return url.toLowerCase().contains('thumb.jpg');
+}
