@@ -308,13 +308,15 @@ class _BaseVideoCardState extends State<_BaseVideoCard>
   }
 
   String? _thumbUrl() {
+    final first = widget.item.subItems.isNotEmpty ? widget.item.subItems.first : null;
+    if (first != null &&
+        first.thumbnailUrl?.trim().isNotEmpty == true) {
+      return first.thumbnailUrl;
+    }
     final u = _videoToThumb(widget.item.url?.trim());
     if (u != null) return u;
-    final first = widget.item.subItems.isNotEmpty ? widget.item.subItems.first : null;
     if (first != null) {
-      return first.thumbnailUrl?.trim().isNotEmpty == true
-          ? first.thumbnailUrl
-          : _videoToThumb(first.url?.trim());
+      return _videoToThumb(first.url?.trim());
     }
     return null;
   }
@@ -533,7 +535,9 @@ class _BaseSubLessonCarouselState extends State<_BaseSubLessonCarousel> {
                 final videoUrl = (sub.url?.trim().isNotEmpty == true)
                     ? sub.url
                     : widget.parentVideoUrl;
-                final thumbUrl = _thumbUrl(videoUrl) ?? sub.thumbnailUrl;
+                final thumbUrl = sub.thumbnailUrl?.trim().isNotEmpty == true
+                    ? sub.thumbnailUrl
+                    : _thumbUrl(videoUrl);
                 final canPlay = (sub.url?.trim().isNotEmpty ?? false) ||
                     widget.canPlayParent;
                 final hasDescription = sub.description != null &&

@@ -40,6 +40,17 @@ cat > "$SNIPPET" << 'NGINX'
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
     }
+    location /api/v1/admin/content/upload-image {
+        client_max_body_size 25M;
+        proxy_request_buffering off;
+        proxy_read_timeout 120s;
+        proxy_send_timeout 120s;
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
 NGINX
 
 echo "Created $SNIPPET"

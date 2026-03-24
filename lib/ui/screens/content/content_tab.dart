@@ -596,13 +596,15 @@ class _ExpandableLessonCardState extends State<_ExpandableLessonCard>
   }
 
   String? _thumbUrl() {
+    final first = widget.subLessons.isNotEmpty ? widget.subLessons.first : null;
+    if (first != null &&
+        first.thumbnailUrl?.trim().isNotEmpty == true) {
+      return first.thumbnailUrl;
+    }
     final u = _videoToThumb(widget.videoUrl?.trim());
     if (u != null) return u;
-    final first = widget.subLessons.isNotEmpty ? widget.subLessons.first : null;
     if (first != null) {
-      return first.thumbnailUrl?.trim().isNotEmpty == true
-          ? first.thumbnailUrl
-          : _videoToThumb(first.url?.trim());
+      return _videoToThumb(first.url?.trim());
     }
     return null;
   }
@@ -825,7 +827,9 @@ class _SubLessonCarouselState extends State<_SubLessonCarousel> {
                   final videoUrl = (sub.url?.trim().isNotEmpty == true)
                       ? sub.url
                       : widget.parentVideoUrl;
-                  final thumbUrl = _thumbUrl(videoUrl) ?? sub.thumbnailUrl;
+                  final thumbUrl = sub.thumbnailUrl?.trim().isNotEmpty == true
+                      ? sub.thumbnailUrl
+                      : _thumbUrl(videoUrl);
                   final canPlay = (sub.url?.trim().isNotEmpty ?? false) ||
                       widget.canPlayParent;
                   final hasDescription = sub.description != null &&
