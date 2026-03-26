@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_quill/flutter_quill.dart';
+import 'package:screen_protector/screen_protector.dart';
 
 import 'admin/admin_app.dart';
 import 'core/theme/app_theme.dart';
@@ -13,7 +14,7 @@ import 'ui/screens/content/content_detail_screen.dart';
 import 'ui/screens/chat/chat_room_screen.dart';
 import 'ui/screens/subscription/subscription_screen.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   if (!kIsWeb) {
@@ -24,6 +25,13 @@ void main() {
         statusBarBrightness: Brightness.light,
       ),
     );
+
+    // Android: FLAG_SECURE — blocks screenshots, screen recording, app switcher preview
+    // iOS: secure UITextField layer — hides content on screenshots and screen recording
+    await ScreenProtector.protectDataLeakageOn();
+    await ScreenProtector.preventScreenshotOn();
+    // iOS: hide content in app switcher with white overlay
+    await ScreenProtector.protectDataLeakageWithColor(Colors.white);
   }
 
   final isAdmin = kIsWeb && Uri.base.path.startsWith('/admin');
