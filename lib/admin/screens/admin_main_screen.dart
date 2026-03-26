@@ -6,6 +6,7 @@ import '../services/admin_api_service.dart';
 import 'admin_chat_moderation_screen.dart';
 import 'admin_content_list_screen.dart';
 import 'admin_login_screen.dart';
+import 'admin_push_screen.dart';
 import 'admin_users_screen.dart';
 
 class AdminMainScreen extends StatefulWidget {
@@ -43,6 +44,7 @@ class _AdminMainScreenState extends State<AdminMainScreen> {
     _NavItem(Icons.school_outlined, Icons.school_rounded, 'База'),
     _NavItem(Icons.people_outline_rounded, Icons.people_rounded, 'Пользователи'),
     _NavItem(Icons.chat_bubble_outline_rounded, Icons.chat_bubble_rounded, 'Чат'),
+    _NavItem(Icons.notifications_none_rounded, Icons.notifications_rounded, 'Пуш'),
   ];
 
   @override
@@ -109,6 +111,7 @@ class _AdminMainScreenState extends State<AdminMainScreen> {
               AdminContentListBody(adminKey: _adminKey, section: 'base'),
               AdminUsersScreen(adminKey: _adminKey),
               AdminChatModerationScreen(adminKey: _adminKey),
+              AdminPushScreen(adminKey: _adminKey),
             ],
           ),
         ),

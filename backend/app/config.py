@@ -57,6 +57,10 @@ class Settings(BaseSettings):
     hls_public_base_url: str = "https://donskih-cdn.ru/hls/uploads"
     upload_max_size_mb: int = 2500
 
+    # Firebase (push notifications)
+    firebase_service_account_path: str = ""
+    firebase_project_id: str = "donskih-push"
+
     # Rate Limiting
     rate_limit_send_code_per_ip: str = "30/10min"
     rate_limit_send_code_per_phone: str = "5/10min"

@@ -455,6 +455,76 @@ class AdminApiService {
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // Push notifications
+  // ---------------------------------------------------------------------------
+
+  Future<Map<String, dynamic>?> sendPush(
+    String? adminKey, {
+    required String title,
+    required String body,
+  }) async {
+    lastError = null;
+    try {
+      final resp = await http.post(
+        Uri.parse('$apiBase/admin/push/send'),
+        headers: _headers(adminKey),
+        body: jsonEncode({'title': title, 'body': body}),
+      );
+      if (resp.statusCode != 200) {
+        lastError = _errorFromResponse(resp);
+        return null;
+      }
+      return jsonDecode(resp.body) as Map<String, dynamic>;
+    } catch (e) {
+      lastError = e.toString();
+      return null;
+    }
+  }
+
+  Future<Map<String, dynamic>?> fetchPushHistory(
+    String? adminKey, {
+    int limit = 50,
+    int offset = 0,
+  }) async {
+    lastError = null;
+    try {
+      final resp = await http.get(
+        Uri.parse('$apiBase/admin/push/history?limit=$limit&offset=$offset'),
+        headers: _headers(adminKey),
+      );
+      if (resp.statusCode != 200) {
+        lastError = _errorFromResponse(resp);
+        return null;
+      }
+      return jsonDecode(resp.body) as Map<String, dynamic>;
+    } catch (e) {
+      lastError = e.toString();
+      return null;
+    }
+  }
+
+  Future<int?> fetchDevicesCount(String? adminKey) async {
+    lastError = null;
+    try {
+      final resp = await http.get(
+        Uri.parse('$apiBase/admin/push/devices-count'),
+        headers: _headers(adminKey),
+      );
+      if (resp.statusCode != 200) {
+        lastError = _errorFromResponse(resp);
+        return null;
+      }
+      final data = jsonDecode(resp.body) as Map<String, dynamic>;
+      return data['count'] as int? ?? 0;
+    } catch (e) {
+      lastError = e.toString();
+      return null;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+
   Future<Map<String, dynamic>?> uploadChecklistBytes(
     String? adminKey, {
     required String filename,

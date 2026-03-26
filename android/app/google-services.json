@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1033419497693",
+    "project_id": "donskih-push",
+    "storage_bucket": "donskih-push.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1033419497693:android:38c2ef8cdf1ed49f40fb34",
+        "android_client_info": {
+          "package_name": "com.club.club_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA38jGPriZ0m_YV0lc0yW8NXh9c0_L-fCI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
-from app.api.v1 import auth, users, bot_webhook, subscription, content, admin_content, chat, admin_users
+from app.api.v1 import auth, users, bot_webhook, subscription, content, admin_content, chat, admin_users, push
 
 logging.basicConfig(
     level=logging.DEBUG if settings.debug else logging.INFO,
@@ -49,6 +49,7 @@ app.include_router(content.router, prefix="/api/v1")
 app.include_router(admin_content.router, prefix="/api/v1")
 app.include_router(chat.router, prefix="/api/v1")
 app.include_router(admin_users.router, prefix="/api/v1")
+app.include_router(push.router, prefix="/api/v1")
 
 os.makedirs("/app/static/chat", exist_ok=True)
 os.makedirs("/app/static/avatars", exist_ok=True)
