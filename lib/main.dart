@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -6,6 +6,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:screen_protector/screen_protector.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'firebase_options.dart';
 
 import 'admin/admin_app.dart';
@@ -24,6 +25,9 @@ void main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
+  // Must be registered before runApp — runs in a separate isolate when app is killed.
+  FirebaseMessaging.onBackgroundMessage(firebaseBackgroundMessageHandler);
+
   if (!kIsWeb) {
     SystemChrome.setSystemUIOverlayStyle(
       const SystemUiOverlayStyle(
@@ -35,9 +39,13 @@ void main() async {
 
     await ScreenProtector.protectDataLeakageOn();
     await ScreenProtector.preventScreenshotOn();
-    await ScreenProtector.protectDataLeakageWithColor(Colors.white);
+    // await ScreenProtector.protectDataLeakageWithColor(Colors.white);
 
-    await PushNotificationService().init();
+    try {
+      await PushNotificationService().init();
+    } catch (e, st) {
+      debugPrint('PushNotificationService.init failed: $e\n$st');
+    }
   }
 
   final isAdmin = kIsWeb && Uri.base.path.startsWith('/admin');

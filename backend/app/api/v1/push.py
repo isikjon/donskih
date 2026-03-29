@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import uuid
@@ -104,13 +105,19 @@ async def send_push(
 
     success = 0
     failure = 0
+    all_stale: List[str] = []
 
     batch_size = 500
     for i in range(0, len(tokens), batch_size):
         batch = tokens[i:i + batch_size]
-        s, f = await _send_fcm_batch(body.title, body.body, batch)
+        s, f, stale = await _send_fcm_batch(body.title, body.body, batch)
         success += s
         failure += f
+        all_stale.extend(stale)
+
+    if all_stale:
+        await db.execute(delete(DeviceToken).where(DeviceToken.token.in_(all_stale)))
+        logger.info(f"Removed {len(all_stale)} stale FCM tokens")
 
     notification = PushNotification(
         title=body.title,
@@ -237,31 +244,32 @@ async def _get_google_access_token() -> str:
     return data["access_token"]
 
 
-async def _send_fcm_batch(title: str, body: str, tokens: List[str]) -> tuple[int, int]:
-    """Send push notifications via FCM HTTP v1 API. Returns (success, failure) counts."""
+async def _send_fcm_batch(title: str, body: str, tokens: List[str]) -> tuple[int, int, List[str]]:
+    """Send push notifications via FCM HTTP v1 API concurrently.
+
+    Returns (success_count, failure_count, stale_tokens).
+    Stale tokens (404 from FCM) should be removed from DB by the caller.
+    """
     try:
         access_token = await _get_google_access_token()
     except Exception as e:
         logger.error(f"Failed to get Google access token: {e}")
-        return 0, len(tokens)
+        return 0, len(tokens), []
 
     project_id = settings.firebase_project_id
     url = f"https://fcm.googleapis.com/v1/projects/{project_id}/messages:send"
 
-    success = 0
-    failure = 0
+    semaphore = asyncio.Semaphore(50)
 
-    async with httpx.AsyncClient(timeout=30) as client:
-        for token in tokens:
-            message = {
-                "message": {
-                    "token": token,
-                    "notification": {
-                        "title": title,
-                        "body": body,
-                    },
-                }
+    async def _send_one(client: httpx.AsyncClient, token: str) -> tuple[str | None, bool]:
+        """Returns (stale_token | None, is_success)."""
+        message = {
+            "message": {
+                "token": token,
+                "notification": {"title": title, "body": body},
             }
+        }
+        async with semaphore:
             try:
                 resp = await client.post(
                     url,
@@ -269,13 +277,18 @@ async def _send_fcm_batch(title: str, body: str, tokens: List[str]) -> tuple[int
                     headers={"Authorization": f"Bearer {access_token}"},
                 )
                 if resp.status_code == 200:
-                    success += 1
-                else:
-                    failure += 1
-                    if resp.status_code == 404:
-                        logger.debug(f"Stale FCM token, should clean up: {token[:20]}...")
+                    return None, True
+                if resp.status_code == 404:
+                    return token, False
+                return None, False
             except Exception as e:
-                failure += 1
-                logger.error(f"FCM send error: {e}")
+                logger.error(f"FCM send error for token {token[:20]}...: {e}")
+                return None, False
 
-    return success, failure
+    async with httpx.AsyncClient(timeout=30) as client:
+        results = await asyncio.gather(*[_send_one(client, t) for t in tokens])
+
+    stale = [r[0] for r in results if r[0] is not None]
+    success = sum(1 for r in results if r[1])
+    failure = len(results) - success
+    return success, failure, stale

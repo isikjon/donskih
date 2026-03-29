@@ -44,7 +44,7 @@ class _AdminMainScreenState extends State<AdminMainScreen> {
     _NavItem(Icons.school_outlined, Icons.school_rounded, 'База'),
     _NavItem(Icons.people_outline_rounded, Icons.people_rounded, 'Пользователи'),
     _NavItem(Icons.chat_bubble_outline_rounded, Icons.chat_bubble_rounded, 'Чат'),
-    _NavItem(Icons.notifications_none_rounded, Icons.notifications_rounded, 'Пуш'),
+    _NavItem(Icons.notifications_outlined, Icons.notifications, 'Пуш'),
   ];
 
   @override

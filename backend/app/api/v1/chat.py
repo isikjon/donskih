@@ -22,6 +22,7 @@ from sqlalchemy.orm import joinedload, selectinload
 from app.config import settings
 from app.database import async_session, get_db
 from app.models.chat import ChatMessage
+from app.models.push import DeviceToken
 from app.models.user import TelegramAccount, User
 from app.schemas.chat import (
     ChatMessageOut,
@@ -75,6 +76,45 @@ class _ConnectionManager:
 
 
 manager = _ConnectionManager()
+
+
+# ---------------------------------------------------------------------------
+# Push notifications for offline users
+# ---------------------------------------------------------------------------
+
+async def _push_chat_message(sender_name: str, text: str | None, sender_user_id: str) -> None:
+    """Send FCM push to all users who are NOT currently connected via WebSocket.
+
+    Opens its own DB session so it's safe to run as a background task
+    after the request's session has been closed.
+    """
+    from app.api.v1.push import _send_fcm_batch
+
+    online_user_ids = set(manager._connections.keys())
+
+    try:
+        async with async_session() as db:
+            result = await db.execute(select(DeviceToken.token, DeviceToken.user_id))
+            rows = result.all()
+    except Exception as e:
+        logger.error(f"_push_chat_message: DB error: {e}")
+        return
+
+    offline_tokens = [
+        row.token for row in rows
+        if str(row.user_id) not in online_user_ids and str(row.user_id) != sender_user_id
+    ]
+
+    if not offline_tokens:
+        return
+
+    title = f"Новое сообщение от {sender_name}"
+    body = text or "📎 Медиафайл"
+
+    try:
+        await _send_fcm_batch(title, body, offline_tokens)
+    except Exception as e:
+        logger.error(f"_push_chat_message: FCM error: {e}")
 
 
 # ---------------------------------------------------------------------------
@@ -218,6 +258,13 @@ async def send_message(
 
     serialized = _serialize(msg)
     await manager.broadcast({"type": "new_message", "message": serialized})
+
+    # Push notification to offline users (non-blocking, uses own DB session)
+    sender_name = serialized.get("sender_name", "Участник")
+    asyncio.create_task(
+        _push_chat_message(sender_name, msg.text, str(current_user.id))
+    )
+
     return serialized
 
 

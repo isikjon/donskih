@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/services/auth_service.dart';
+import '../../../core/services/push_notification_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/theme/app_spacing.dart';
@@ -173,6 +174,7 @@ class _AuthScreenState extends State<AuthScreen> with WidgetsBindingObserver {
 
     if (user != null && user['telegram_account'] != null) {
       _pollTimer?.cancel();
+      PushNotificationService().registerCurrentToken();
       Navigator.of(context).pushReplacementNamed('/home');
     }
   }
@@ -187,6 +189,7 @@ class _AuthScreenState extends State<AuthScreen> with WidgetsBindingObserver {
     if (!mounted) return;
 
     if (user != null && user['telegram_account'] != null) {
+      PushNotificationService().registerCurrentToken();
       Navigator.of(context).pushReplacementNamed('/home');
     } else if (user != null) {
       // Logged in but Telegram not linked — force link step
@@ -305,6 +308,7 @@ class _AuthScreenState extends State<AuthScreen> with WidgetsBindingObserver {
 
     if (user != null && user['telegram_account'] != null) {
       _pollTimer?.cancel();
+      PushNotificationService().registerCurrentToken();
       Navigator.of(context).pushReplacementNamed('/home');
     } else {
       setState(() {
