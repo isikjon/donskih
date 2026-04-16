@@ -3,7 +3,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../components/app_button.dart';
 
-/// Подписка Donskih
+/// Подписка
 class SubscriptionScreen extends StatefulWidget {
   const SubscriptionScreen({super.key});
 
@@ -24,14 +24,17 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
         children: [
           // Header
           Center(
-            child: Image.asset('assets/images/logo.png', width: 100, height: 100),
+            child:
+                Image.asset('assets/images/logo.png', width: 100, height: 100),
           ),
           const SizedBox(height: 20),
-          Text('Donskih Premium', style: AppTypography.headlineMedium, textAlign: TextAlign.center),
+          Text('Макияж для себя Premium',
+              style: AppTypography.headlineMedium, textAlign: TextAlign.center),
           const SizedBox(height: 8),
           Text(
             'Получите полный доступ ко всем материалам',
-            style: AppTypography.bodyMedium.copyWith(color: AppColors.textSecondary),
+            style: AppTypography.bodyMedium
+                .copyWith(color: AppColors.textSecondary),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 32),
@@ -46,11 +49,18 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
             ),
             child: Column(
               children: [
-                _Feature(icon: Icons.play_circle_outline, title: 'Все видеоматериалы'),
+                _Feature(
+                    icon: Icons.play_circle_outline,
+                    title: 'Все видеоматериалы'),
                 _Feature(icon: Icons.article_outlined, title: 'База знаний'),
-                _Feature(icon: Icons.chat_bubble_outline, title: 'Закрытый чат'),
-                _Feature(icon: Icons.download_outlined, title: 'Скачивание материалов'),
-                _Feature(icon: Icons.calendar_today_outlined, title: 'Эксклюзивные мероприятия'),
+                _Feature(
+                    icon: Icons.chat_bubble_outline, title: 'Закрытый чат'),
+                _Feature(
+                    icon: Icons.download_outlined,
+                    title: 'Скачивание материалов'),
+                _Feature(
+                    icon: Icons.calendar_today_outlined,
+                    title: 'Эксклюзивные мероприятия'),
               ],
             ),
           ),
@@ -89,7 +99,8 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.check_circle_outline, color: AppColors.success, size: 20),
+                    const Icon(Icons.check_circle_outline,
+                        color: AppColors.success, size: 20),
                     const SizedBox(width: 8),
                     Text('Подписка активна', style: AppTypography.titleSmall),
                   ],
@@ -106,7 +117,9 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
           Center(
             child: TextButton(
               onPressed: () {},
-              child: Text('Отменить подписку', style: AppTypography.buttonSmall.copyWith(color: AppColors.textTertiary)),
+              child: Text('Отменить подписку',
+                  style: AppTypography.buttonSmall
+                      .copyWith(color: AppColors.textTertiary)),
             ),
           ),
           const SizedBox(height: 100),
@@ -121,7 +134,8 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
         ),
         decoration: BoxDecoration(
           color: AppColors.surface,
-          border: const Border(top: BorderSide(color: AppColors.border, width: 0.5)),
+          border: const Border(
+              top: BorderSide(color: AppColors.border, width: 0.5)),
         ),
         child: AppButton(text: 'Продолжить', onPressed: () {}),
       ),
@@ -180,7 +194,8 @@ class _PlanCard extends StatelessWidget {
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: isSelected ? AppColors.primary : AppColors.border),
+            border: Border.all(
+                color: isSelected ? AppColors.primary : AppColors.border),
           ),
           child: Row(
             children: [
@@ -189,10 +204,17 @@ class _PlanCard extends StatelessWidget {
                 height: 22,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  border: Border.all(color: isSelected ? Colors.white : AppColors.border, width: 2),
+                  border: Border.all(
+                      color: isSelected ? Colors.white : AppColors.border,
+                      width: 2),
                 ),
                 child: isSelected
-                    ? Center(child: Container(width: 10, height: 10, decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle)))
+                    ? Center(
+                        child: Container(
+                            width: 10,
+                            height: 10,
+                            decoration: const BoxDecoration(
+                                color: Colors.white, shape: BoxShape.circle)))
                     : null,
               ),
               const SizedBox(width: 14),
@@ -200,17 +222,27 @@ class _PlanCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(title, style: AppTypography.titleSmall.copyWith(color: isSelected ? Colors.white : null)),
+                    Text(title,
+                        style: AppTypography.titleSmall
+                            .copyWith(color: isSelected ? Colors.white : null)),
                     if (badge != null)
-                      Text(badge!, style: AppTypography.labelSmall.copyWith(color: isSelected ? Colors.white70 : AppColors.success)),
+                      Text(badge!,
+                          style: AppTypography.labelSmall.copyWith(
+                              color: isSelected
+                                  ? Colors.white70
+                                  : AppColors.success)),
                   ],
                 ),
               ),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Text(price, style: AppTypography.titleMedium.copyWith(color: isSelected ? Colors.white : null)),
-                  Text(period, style: AppTypography.bodySmall.copyWith(color: isSelected ? Colors.white70 : null)),
+                  Text(price,
+                      style: AppTypography.titleMedium
+                          .copyWith(color: isSelected ? Colors.white : null)),
+                  Text(period,
+                      style: AppTypography.bodySmall
+                          .copyWith(color: isSelected ? Colors.white70 : null)),
                 ],
               ),
             ],

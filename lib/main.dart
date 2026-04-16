@@ -58,7 +58,7 @@ class DonskihApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Donskih',
+      title: 'Макияж для себя',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light.copyWith(
         textTheme: GoogleFonts.montserratTextTheme(AppTheme.light.textTheme),

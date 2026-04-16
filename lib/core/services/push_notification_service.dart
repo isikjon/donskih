@@ -6,14 +6,15 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:http/http.dart' as http;
 
 import 'auth_service.dart';
+import 'notification_prefs_service.dart';
 
 const _apiBase = 'https://donskih-cdn.ru/api/v1';
 
 /// Android notification channel for high-importance push notifications.
 const _androidChannel = AndroidNotificationChannel(
   'donskih_push_channel',
-  'Уведомления Donskih',
-  description: 'Push-уведомления от приложения Donskih',
+  'Уведомления',
+  description: 'Push-уведомления от приложения Макияж для себя',
   importance: Importance.high,
   playSound: true,
 );
@@ -23,7 +24,8 @@ final _localNotifications = FlutterLocalNotificationsPlugin();
 /// Must be top-level — called by Firebase in a separate isolate when app is terminated/background.
 @pragma('vm:entry-point')
 Future<void> firebaseBackgroundMessageHandler(RemoteMessage message) async {
-  debugPrint('FCM background: ${message.notification?.title}');
+  debugPrint(
+      '[PUSH-DIAG] FCM background handler: ${message.notification?.title}');
 }
 
 class PushNotificationService {
@@ -39,6 +41,8 @@ class PushNotificationService {
     if (_initialized || kIsWeb) return;
     _initialized = true;
 
+    debugPrint('[PUSH-DIAG] ===== Push Notification Service init =====');
+
     await _initLocalNotifications();
 
     try {
@@ -47,40 +51,71 @@ class PushNotificationService {
         badge: true,
         sound: true,
       );
-      debugPrint('FCM authorization: ${settings.authorizationStatus}');
+      debugPrint(
+          '[PUSH-DIAG] Authorization status: ${settings.authorizationStatus}');
+      debugPrint('[PUSH-DIAG] Alert setting: ${settings.alert}');
+      debugPrint('[PUSH-DIAG] Sound setting: ${settings.sound}');
+      debugPrint('[PUSH-DIAG] Badge setting: ${settings.badge}');
     } catch (e) {
-      debugPrint('FCM requestPermission failed: $e');
+      debugPrint('[PUSH-DIAG] requestPermission FAILED: $e');
     }
 
-    // Show notifications when app is in foreground on iOS.
     await _messaging.setForegroundNotificationPresentationOptions(
       alert: true,
       badge: true,
       sound: true,
     );
 
-    _messaging.onTokenRefresh.listen(_registerToken);
+    _messaging.onTokenRefresh.listen((token) {
+      debugPrint('[PUSH-DIAG] Token REFRESHED: ${token.substring(0, 12)}...');
+      _registerToken(token);
+    });
     FirebaseMessaging.onMessage.listen(_onForegroundMessage);
 
-    // Handle notification tap when app was in background.
     FirebaseMessaging.onMessageOpenedApp.listen(_onNotificationTap);
 
-    // Handle notification tap when app was terminated.
     final initialMessage = await _messaging.getInitialMessage();
     if (initialMessage != null) {
       _onNotificationTap(initialMessage);
     }
 
+    if (!kIsWeb && Platform.isIOS) {
+      try {
+        final apnsToken = await _messaging.getAPNSToken();
+        debugPrint(
+            '[PUSH-DIAG] APNs token: ${apnsToken ?? "NULL — push WILL NOT WORK!"}');
+        if (apnsToken == null) {
+          debugPrint(
+              '[PUSH-DIAG] ⚠️  APNs token is null. Retrying in 3 seconds...');
+          await Future.delayed(const Duration(seconds: 3));
+          final retryApns = await _messaging.getAPNSToken();
+          debugPrint(
+              '[PUSH-DIAG] APNs token (retry): ${retryApns ?? "STILL NULL"}');
+        }
+      } catch (e) {
+        debugPrint('[PUSH-DIAG] getAPNSToken error: $e');
+      }
+    }
+
     try {
       final token = await _messaging.getToken();
-      if (token != null) await _registerToken(token);
+      debugPrint(
+          '[PUSH-DIAG] FCM token: ${token != null ? '${token.substring(0, 12)}...' : 'NULL'}');
+      if (token != null) {
+        await _registerToken(token);
+      } else {
+        debugPrint('[PUSH-DIAG] ⚠️  FCM token is NULL — no push possible');
+      }
     } catch (e) {
-      debugPrint('FCM getToken failed (normal on simulator): $e');
+      debugPrint('[PUSH-DIAG] getToken FAILED: $e');
     }
+
+    debugPrint('[PUSH-DIAG] ===== Push init complete =====');
   }
 
   Future<void> _initLocalNotifications() async {
-    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const androidSettings =
+        AndroidInitializationSettings('@mipmap/ic_launcher');
     const iosSettings = DarwinInitializationSettings(
       requestAlertPermission: false,
       requestBadgePermission: false,
@@ -113,12 +148,18 @@ class PushNotificationService {
 
   Future<void> _registerToken(String fcmToken) async {
     final accessToken = await _auth.accessToken;
-    if (accessToken == null) return;
+    if (accessToken == null) {
+      debugPrint('[PUSH-DIAG] _registerToken: no access token, skip');
+      return;
+    }
 
     final platform = kIsWeb ? 'web' : (Platform.isIOS ? 'ios' : 'android');
 
+    debugPrint(
+        '[PUSH-DIAG] Registering token=${fcmToken.substring(0, 12)}... platform=$platform');
+
     try {
-      await http.post(
+      final resp = await http.post(
         Uri.parse('$_apiBase/devices/register'),
         headers: {
           'Authorization': 'Bearer $accessToken',
@@ -126,19 +167,33 @@ class PushNotificationService {
         },
         body: jsonEncode({'token': fcmToken, 'platform': platform}),
       );
+      debugPrint(
+          '[PUSH-DIAG] Register response: ${resp.statusCode} ${resp.body}');
     } catch (e) {
-      debugPrint('Failed to register FCM token: $e');
+      debugPrint('[PUSH-DIAG] Register FAILED: $e');
     }
   }
 
-  /// Called when a push arrives while the app is open (foreground).
-  /// On Android FCM does not auto-show the notification UI — we do it manually.
-  /// On iOS setForegroundNotificationPresentationOptions handles it natively,
-  /// but we still show a local notification so Android works identically.
   void _onForegroundMessage(RemoteMessage message) {
     final notification = message.notification;
+    debugPrint('[PUSH-DIAG] FOREGROUND message received: '
+        'title=${notification?.title}, body=${notification?.body}, '
+        'data=${message.data}, from=${message.from}');
     if (notification == null) return;
 
+    final pushType = message.data['type'] as String? ?? 'admin';
+    NotificationPrefsService().isTypeEnabled(pushType).then((allowed) {
+      if (!allowed) {
+        debugPrint(
+            '[PUSH-DIAG] Notification type=$pushType suppressed by user prefs');
+        return;
+      }
+      _showLocalNotification(notification, message);
+    });
+  }
+
+  void _showLocalNotification(
+      RemoteNotification notification, RemoteMessage message) {
     _localNotifications.show(
       notification.hashCode,
       notification.title,
@@ -150,7 +205,8 @@ class PushNotificationService {
           channelDescription: _androidChannel.description,
           importance: Importance.high,
           priority: Priority.high,
-          icon: message.notification?.android?.smallIcon ?? '@mipmap/ic_launcher',
+          icon:
+              message.notification?.android?.smallIcon ?? '@mipmap/ic_launcher',
           playSound: true,
         ),
         iOS: const DarwinNotificationDetails(

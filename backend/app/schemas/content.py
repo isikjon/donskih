@@ -34,6 +34,7 @@ class ContentItemOut(BaseModel):
     subtitle: str | None = None
     sort_order: int
     url: str | None = None
+    is_active: bool = True
     sub_items: list[ContentSubItemOut] = []
 
     model_config = {"from_attributes": True}
@@ -47,6 +48,7 @@ class ContentItemCreate(BaseModel):
     subtitle: str | None = Field(None, max_length=10000)
     sort_order: int = 0
     url: str | None = Field(None, max_length=2048)
+    is_active: bool = True
     sub_items: list[ContentSubItemIn] = []
 
 
@@ -57,6 +59,7 @@ class ContentItemUpdate(BaseModel):
     subtitle: str | None = Field(None, max_length=10000)
     sort_order: int | None = None
     url: str | None = Field(None, max_length=2048)
+    is_active: bool | None = None
     sub_items: list[ContentSubItemIn] | None = None
 
 
@@ -70,6 +73,7 @@ def content_item_to_out(item) -> ContentItemOut:
         subtitle=item.subtitle,
         sort_order=item.sort_order,
         url=item.url,
+        is_active=item.is_active,
         sub_items=[
             ContentSubItemOut(
                 id=s.id,

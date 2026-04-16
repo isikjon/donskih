@@ -9,6 +9,8 @@ import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../widgets/rich_description_viewer.dart';
 import '../../components/app_bookmark.dart';
+import '../media_viewer/media_viewer_screen.dart';
+import '../profile/notification_settings_screen.dart';
 import '../video/video_player_screen.dart';
 // ═══════════════════════════════════════════════════════════════
 // MAIN TAB — API-driven (section=base)
@@ -29,6 +31,7 @@ class _BaseTabState extends State<BaseTab> {
   final _bookmarks = <String, bool>{};
   Map<String, List<ContentItemDto>>? _contentByDate;
   bool _loading = true;
+  bool _showLessons = true;
 
   @override
   void initState() {
@@ -119,8 +122,47 @@ class _BaseTabState extends State<BaseTab> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
-          child: Text('База Знаний', style: AppTypography.headlineSmall),
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+          child: Row(
+            children: [
+              Expanded(
+                  child:
+                      Text('База знаний', style: AppTypography.headlineSmall)),
+              GestureDetector(
+                onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => const NotificationSettingsScreen(),
+                )),
+                child: Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceSecondary,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.notifications_outlined,
+                      color: AppColors.primary, size: 22),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+          child: Row(
+            children: [
+              _TabChip(
+                label: 'Уроки',
+                selected: _showLessons,
+                onTap: () => setState(() => _showLessons = true),
+              ),
+              const SizedBox(width: 10),
+              _TabChip(
+                label: 'Чек-листы',
+                selected: !_showLessons,
+                onTap: () => setState(() => _showLessons = false),
+              ),
+            ],
+          ),
         ),
         Expanded(
           child: RefreshIndicator(
@@ -146,31 +188,48 @@ class _BaseTabState extends State<BaseTab> {
   Widget _buildList() {
     final dates = _contentByDate!.keys.toList()..sort((a, b) => a.compareTo(b));
     final widgets = <Widget>[];
+    int lessonIndex = 0;
+
     for (final dateIso in dates) {
       final items = _contentByDate![dateIso]!;
-      final label = ContentItemDto.formatDisplayDate(dateIso);
-      widgets.add(_BaseDateLabel(label));
-      widgets.add(const SizedBox(height: 8));
       for (final item in items) {
         final id = item.id.toString();
-        if (item.isVideo) {
-          widgets.add(_BaseVideoCard(
-            item: item,
-            isBookmarked: _isBookmarked(id),
-            onBookmark: (v) => _toggleBookmark(id, v),
-            onPlayMain: () => _openVideo(item),
-            onPlaySub: (sub) => _openVideo(item, sub: sub),
+        if (item.isVideo && _showLessons) {
+          lessonIndex++;
+          widgets.add(Opacity(
+            opacity: item.isActive ? 1.0 : 0.45,
+            child: IgnorePointer(
+              ignoring: !item.isActive,
+              child: _BaseVideoCard(
+                item: item,
+                dateLabel: 'Урок $lessonIndex',
+                isBookmarked: _isBookmarked(id),
+                onBookmark: (v) => _toggleBookmark(id, v),
+                onPlayMain: () => _openVideo(item),
+                onPlaySub: (sub) => _openVideo(item, sub: sub),
+              ),
+            ),
           ));
-        } else {
-          widgets.add(_BaseChecklistCard(
-            item: item,
-            isBookmarked: _isBookmarked(id),
-            onBookmark: (v) => _toggleBookmark(id, v),
-            onTap: () => _openChecklist(item),
+          widgets.add(const SizedBox(height: 10));
+        } else if (!item.isVideo && !_showLessons) {
+          widgets.add(Opacity(
+            opacity: item.isActive ? 1.0 : 0.45,
+            child: IgnorePointer(
+              ignoring: !item.isActive,
+              child: _BaseChecklistCard(
+                item: item,
+                isBookmarked: _isBookmarked(id),
+                onBookmark: (v) => _toggleBookmark(id, v),
+                onTap: () => _openChecklist(item),
+              ),
+            ),
           ));
+          widgets.add(const SizedBox(height: 10));
         }
-        widgets.add(const SizedBox(height: 10));
       }
+    }
+    if (widgets.isEmpty) {
+      return _buildEmpty();
     }
     widgets.add(const SizedBox(height: 100));
     return ListView(
@@ -228,34 +287,12 @@ class _BaseSubLesson {
 }
 
 // ---------------------------------------------------------------------------
-// Date label
-// ---------------------------------------------------------------------------
-
-class _BaseDateLabel extends StatelessWidget {
-  final String text;
-  const _BaseDateLabel(this.text);
-
-  @override
-  Widget build(BuildContext context) {
-                return Padding(
-      padding: const EdgeInsets.only(top: 8),
-      child: Text(
-        text,
-        style: AppTypography.labelMedium.copyWith(
-          color: AppColors.textTertiary,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Video card (expandable)
 // ---------------------------------------------------------------------------
 
 class _BaseVideoCard extends StatefulWidget {
   final ContentItemDto item;
+  final String? dateLabel;
   final bool isBookmarked;
   final ValueChanged<bool> onBookmark;
   final VoidCallback onPlayMain;
@@ -263,6 +300,7 @@ class _BaseVideoCard extends StatefulWidget {
 
   const _BaseVideoCard({
     required this.item,
+    this.dateLabel,
     required this.isBookmarked,
     required this.onBookmark,
     required this.onPlayMain,
@@ -302,15 +340,17 @@ class _BaseVideoCardState extends State<_BaseVideoCard>
     if (url == null || url.trim().isEmpty) return null;
     final uri = Uri.tryParse(url.trim());
     if (uri == null || !uri.path.endsWith('/index.m3u8')) return null;
-    return uri.replace(
-      path: uri.path.replaceFirst(RegExp(r'/index\.m3u8$'), '/thumb.jpg'),
-    ).toString();
+    return uri
+        .replace(
+          path: uri.path.replaceFirst(RegExp(r'/index\.m3u8$'), '/thumb.jpg'),
+        )
+        .toString();
   }
 
   String? _thumbUrl() {
-    final first = widget.item.subItems.isNotEmpty ? widget.item.subItems.first : null;
-    if (first != null &&
-        first.thumbnailUrl?.trim().isNotEmpty == true) {
+    final first =
+        widget.item.subItems.isNotEmpty ? widget.item.subItems.first : null;
+    if (first != null && first.thumbnailUrl?.trim().isNotEmpty == true) {
       return first.thumbnailUrl;
     }
     final u = _videoToThumb(widget.item.url?.trim());
@@ -326,27 +366,29 @@ class _BaseVideoCardState extends State<_BaseVideoCard>
     final thumbUrl = _thumbUrl();
     final subs = widget.item.subItems
         .map((s) => _BaseSubLesson(s.title, s.duration ?? '',
-            description: s.description, url: s.url, thumbnailUrl: s.thumbnailUrl))
+            description: s.description,
+            url: s.url,
+            thumbnailUrl: s.thumbnailUrl))
         .toList();
     final canPlayMain = (widget.item.url ?? '').trim().isNotEmpty;
 
     return Container(
-            decoration: BoxDecoration(
-              color: AppColors.surface,
+      decoration: BoxDecoration(
+        color: AppColors.surface,
         borderRadius: BorderRadius.circular(AppSpacing.radiusLarge),
-              border: Border.all(color: AppColors.border, width: 0.5),
-              boxShadow: const [
-                BoxShadow(
+        border: Border.all(color: AppColors.border, width: 0.5),
+        boxShadow: const [
+          BoxShadow(
               color: AppColors.shadow, blurRadius: 10, offset: Offset(0, 2)),
         ],
       ),
-                  child: Column(
-                    children: [
-          // Header — без пустой заглушки: превью только если есть картинка
+      child: Column(
+        children: [
           Padding(
             padding: const EdgeInsets.all(12),
             child: Row(
-                children: [
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
                 if (thumbUrl != null)
                   InkWell(
                     onTap: canPlayMain ? widget.onPlayMain : null,
@@ -375,7 +417,10 @@ class _BaseVideoCardState extends State<_BaseVideoCard>
                             Center(
                               child: Icon(
                                 Icons.play_circle_filled_rounded,
-                                color: canPlayMain ? Colors.white : AppColors.textTertiary.withValues(alpha: 0.45),
+                                color: canPlayMain
+                                    ? Colors.white
+                                    : AppColors.textTertiary
+                                        .withValues(alpha: 0.45),
                                 size: 28,
                               ),
                             ),
@@ -393,42 +438,56 @@ class _BaseVideoCardState extends State<_BaseVideoCard>
                       size: 32,
                     ),
                   ),
-                  Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (widget.dateLabel != null) ...[
+                        Text(
+                          widget.dateLabel!,
+                          style: AppTypography.labelSmall.copyWith(
+                            color: AppColors.textTertiary,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                      ],
                       Text(widget.item.title,
-                            style: AppTypography.titleSmall,
+                          style: AppTypography.titleSmall
+                              .copyWith(fontWeight: FontWeight.w600),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis),
-                      if ((ContentItemDto.subtitleToPlainText(widget.item.subtitle) ?? '').isNotEmpty) ...[
-                          const SizedBox(height: 2),
-                        Text(ContentItemDto.subtitleToPlainText(widget.item.subtitle)!,
-                            style: AppTypography.bodySmall,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis),
+                      if ((ContentItemDto.subtitleToPlainText(
+                                  widget.item.subtitle) ??
+                              '')
+                          .isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          ContentItemDto.subtitleToPlainText(
+                              widget.item.subtitle)!,
+                          style: AppTypography.bodySmall
+                              .copyWith(color: AppColors.textSecondary),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ],
-                        ],
-                      ),
-                    ),
+                    ],
+                  ),
+                ),
                 AnimatedBookmark(
                     isBookmarked: widget.isBookmarked,
                     onToggle: widget.onBookmark,
                     size: 20),
-                if (subs.isNotEmpty ||
-                    (ContentItemDto.subtitleToPlainText(widget.item.subtitle) ?? '').trim().isNotEmpty)
-                  IconButton(
-                    onPressed: _toggle,
-                    icon: Icon(
-                      _expanded ? Icons.expand_less : Icons.expand_more,
-                      color: AppColors.textTertiary,
-                      size: 22,
-                    ),
+                IconButton(
+                  onPressed: _toggle,
+                  icon: Icon(
+                    _expanded ? Icons.expand_less : Icons.expand_more,
+                    color: AppColors.textTertiary,
+                    size: 22,
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-          // Expanded: full description + sub-lessons carousel
+          ),
           SizeTransition(
             sizeFactor: _anim,
             child: Column(
@@ -436,7 +495,10 @@ class _BaseVideoCardState extends State<_BaseVideoCard>
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const Divider(height: 1),
-                if ((ContentItemDto.subtitleToPlainText(widget.item.subtitle) ?? '').trim().isNotEmpty)
+                if ((ContentItemDto.subtitleToPlainText(widget.item.subtitle) ??
+                        '')
+                    .trim()
+                    .isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
                     child: RichDescriptionViewer(
@@ -458,7 +520,7 @@ class _BaseVideoCardState extends State<_BaseVideoCard>
               ],
             ),
           ),
-      ],
+        ],
       ),
     );
   }
@@ -501,9 +563,26 @@ class _BaseSubLessonCarouselState extends State<_BaseSubLessonCarousel> {
     if (uri == null || !uri.path.endsWith('/index.m3u8')) return null;
     return uri
         .replace(
-            path: uri.path
-                .replaceFirst(RegExp(r'/index\.m3u8$'), '/thumb.jpg'))
+            path: uri.path.replaceFirst(RegExp(r'/index\.m3u8$'), '/thumb.jpg'))
         .toString();
+  }
+
+  bool _isImageOnly(_BaseSubLesson sub) {
+    return (sub.url == null || sub.url!.trim().isEmpty) &&
+        sub.thumbnailUrl != null &&
+        sub.thumbnailUrl!.trim().isNotEmpty;
+  }
+
+  void _openImageFullscreen(
+      BuildContext context, String imageUrl, String title) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => MediaViewerScreen(
+          imageUrls: [imageUrl],
+          caption: title,
+        ),
+      ),
+    );
   }
 
   static const _descAreaHeight = 180.0;
@@ -513,34 +592,31 @@ class _BaseSubLessonCarouselState extends State<_BaseSubLessonCarousel> {
     return LayoutBuilder(builder: (context, constraints) {
       final thumbWidth = constraints.maxWidth - 24;
       final thumbHeight = thumbWidth * 16 / 9;
-      final thumbSectionHeight = 44 + thumbHeight;
-      final currentSub = widget.subLessons[
-        _currentPage.clamp(0, widget.subLessons.length - 1)];
-      final currentHasDescription = (currentSub.description ?? '').trim().isNotEmpty;
-      final carouselHeight = thumbSectionHeight +
-          (currentHasDescription ? _descAreaHeight : 0.0);
+      final thumbSectionHeight = 44.0 + thumbHeight;
+      final anyHasDescription =
+          widget.subLessons.any((s) => (s.description ?? '').trim().isNotEmpty);
+      final carouselHeight =
+          thumbSectionHeight + (anyHasDescription ? _descAreaHeight : 0.0);
 
       return Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          AnimatedSize(
-            duration: const Duration(milliseconds: 250),
-            curve: Curves.easeOut,
-            child: SizedBox(
-              height: carouselHeight,
-              child: PageView.builder(
+          SizedBox(
+            height: carouselHeight,
+            child: PageView.builder(
               controller: _pageController,
               itemCount: widget.subLessons.length,
               onPageChanged: (i) => setState(() => _currentPage = i),
               itemBuilder: (context, index) {
                 final sub = widget.subLessons[index];
+                final isImage = _isImageOnly(sub);
                 final videoUrl = (sub.url?.trim().isNotEmpty == true)
                     ? sub.url
                     : widget.parentVideoUrl;
                 final thumbUrl = sub.thumbnailUrl?.trim().isNotEmpty == true
                     ? sub.thumbnailUrl
                     : _thumbUrl(videoUrl);
-                final canPlay = (sub.url?.trim().isNotEmpty ?? false) ||
+                final hasVideo = (sub.url?.trim().isNotEmpty ?? false) ||
                     widget.canPlayParent;
                 final hasDescription = sub.description != null &&
                     sub.description!.trim().isNotEmpty;
@@ -548,7 +624,6 @@ class _BaseSubLessonCarouselState extends State<_BaseSubLessonCarousel> {
                 return Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   child: Column(
-                    mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const SizedBox(height: 12),
@@ -559,9 +634,12 @@ class _BaseSubLessonCarouselState extends State<_BaseSubLessonCarousel> {
                           overflow: TextOverflow.ellipsis),
                       const SizedBox(height: 8),
                       GestureDetector(
-                        onTap: canPlay
-                            ? () => widget.onPlaySubLesson(sub)
-                            : null,
+                        onTap: isImage
+                            ? () => _openImageFullscreen(
+                                context, thumbUrl!, sub.title)
+                            : (hasVideo
+                                ? () => widget.onPlaySubLesson(sub)
+                                : null),
                         child: AspectRatio(
                           aspectRatio: 9 / 16,
                           child: Container(
@@ -583,14 +661,16 @@ class _BaseSubLessonCarouselState extends State<_BaseSubLessonCarousel> {
                                       errorWidget: (_, __, ___) =>
                                           const SizedBox(),
                                     ),
-                                  if (contentThumbnailIsVideoPosterFrame(
-                                      thumbUrl))
+                                  if (!isImage &&
+                                      contentThumbnailIsVideoPosterFrame(
+                                          thumbUrl))
                                     Container(
                                       color: Colors.black.withValues(
                                           alpha: thumbUrl != null ? 0.15 : 0),
                                     ),
-                                  if (contentThumbnailIsVideoPosterFrame(
-                                      thumbUrl))
+                                  if (!isImage &&
+                                      contentThumbnailIsVideoPosterFrame(
+                                          thumbUrl))
                                     Center(
                                       child: Container(
                                         width: 56,
@@ -609,7 +689,7 @@ class _BaseSubLessonCarouselState extends State<_BaseSubLessonCarousel> {
                                         ),
                                         child: Icon(
                                           Icons.play_arrow_rounded,
-                                          color: canPlay
+                                          color: hasVideo
                                               ? AppColors.primary
                                               : AppColors.textTertiary,
                                           size: 32,
@@ -648,7 +728,12 @@ class _BaseSubLessonCarouselState extends State<_BaseSubLessonCarousel> {
                             shaderCallback: (bounds) => LinearGradient(
                               begin: Alignment.topCenter,
                               end: Alignment.bottomCenter,
-                              colors: const [Colors.white, Colors.white, Colors.white, Colors.transparent],
+                              colors: const [
+                                Colors.white,
+                                Colors.white,
+                                Colors.white,
+                                Colors.transparent
+                              ],
                               stops: const [0.0, 0.7, 0.85, 1.0],
                             ).createShader(bounds),
                             blendMode: BlendMode.dstIn,
@@ -672,30 +757,27 @@ class _BaseSubLessonCarouselState extends State<_BaseSubLessonCarousel> {
               },
             ),
           ),
-        ),
           if (widget.subLessons.length > 1)
-          Padding(
-            padding: const EdgeInsets.only(top: 12, bottom: 12),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children:
-                  List.generate(widget.subLessons.length, (i) {
-                final isActive = i == _currentPage;
-                return AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  width: isActive ? 20 : 8,
-                  height: 8,
-                  margin: const EdgeInsets.symmetric(horizontal: 3),
-                  decoration: BoxDecoration(
-                    color:
-                        isActive ? AppColors.primary : AppColors.border,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                );
-              }),
+            Padding(
+              padding: const EdgeInsets.only(top: 12, bottom: 12),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(widget.subLessons.length, (i) {
+                  final isActive = i == _currentPage;
+                  return AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    width: isActive ? 20 : 8,
+                    height: 8,
+                    margin: const EdgeInsets.symmetric(horizontal: 3),
+                    decoration: BoxDecoration(
+                      color: isActive ? AppColors.primary : AppColors.border,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  );
+                }),
+              ),
             ),
-          ),
-        if (widget.subLessons.length <= 1) const SizedBox(height: 12),
+          if (widget.subLessons.length <= 1) const SizedBox(height: 12),
         ],
       );
     });
@@ -719,92 +801,79 @@ class _BaseChecklistCard extends StatelessWidget {
     required this.onTap,
   });
 
-  String? _thumbUrl() {
-    final url = item.url?.trim();
-    if (url == null || url.isEmpty) return null;
-    final uri = Uri.tryParse(url);
-    if (uri == null || !uri.path.toLowerCase().endsWith('.pdf')) return null;
-    return uri
-        .replace(
-            path: uri.path
-                .replaceFirst(RegExp(r'\.pdf$', caseSensitive: false), '.jpg'))
-        .toString();
-  }
-
   @override
   Widget build(BuildContext context) {
-    final thumbUrl = _thumbUrl();
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
           borderRadius: BorderRadius.circular(AppSpacing.radiusLarge),
-        border: Border.all(color: AppColors.border, width: 0.5),
-        boxShadow: const [
-          BoxShadow(
-                color: AppColors.shadow,
-                blurRadius: 10,
-                offset: Offset(0, 2)),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-              width: 72,
-              height: 54,
-            decoration: BoxDecoration(
-              color: AppColors.primaryLight,
-              borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppColors.border, width: 0.5),
+          boxShadow: const [
+            BoxShadow(
+                color: AppColors.shadow, blurRadius: 10, offset: Offset(0, 2)),
+          ],
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.picture_as_pdf_rounded,
+                color: AppColors.primary, size: 24),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(item.title,
+                  style: AppTypography.bodyMedium,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis),
             ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(10),
-                child: Stack(fit: StackFit.expand, children: [
-                  if (thumbUrl != null)
-                    CachedNetworkImage(
-                      imageUrl: thumbUrl,
-                      fit: BoxFit.cover,
-                      errorWidget: (_, __, ___) => const SizedBox(),
-                      placeholder: (_, __) =>
-                          Container(color: AppColors.surfaceSecondary),
-                    ),
-                  Container(
-                      color: Colors.black
-                          .withValues(alpha: thumbUrl == null ? 0 : 0.15)),
-                  const Center(
-                    child: Icon(Icons.picture_as_pdf_rounded,
-                        color: AppColors.primary, size: 26),
-                  ),
-                ]),
-              ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                  Text(item.title,
-                      style: AppTypography.titleSmall,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis),
-                  if ((ContentItemDto.subtitleToPlainText(item.subtitle) ?? '').isNotEmpty) ...[
-                const SizedBox(height: 2),
-                    Text(ContentItemDto.subtitleToPlainText(item.subtitle)!,
-                        style: AppTypography.bodySmall,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis),
-                  ],
-              ],
-            ),
-          ),
-            AnimatedBookmark(
-                isBookmarked: isBookmarked, onToggle: onBookmark, size: 20),
-        ],
+            Icon(Icons.download_outlined,
+                color: AppColors.textTertiary, size: 22),
+          ],
         ),
       ),
     );
   }
 }
 
+// ---------------------------------------------------------------------------
+// Tab chip
+// ---------------------------------------------------------------------------
+
+class _TabChip extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _TabChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+        decoration: BoxDecoration(
+          color: selected ? AppColors.primary : Colors.transparent,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: selected ? AppColors.primary : AppColors.border,
+            width: 1,
+          ),
+        ),
+        child: Text(
+          label,
+          style: AppTypography.labelMedium.copyWith(
+            color: selected ? Colors.white : AppColors.textPrimary,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+    );
+  }
+}

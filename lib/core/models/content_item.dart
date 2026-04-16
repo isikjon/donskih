@@ -41,6 +41,7 @@ class ContentItemDto {
   final String? subtitle;
   final int sortOrder;
   final String? url;
+  final bool isActive;
   final List<ContentSubItemDto> subItems;
 
   ContentItemDto({
@@ -52,6 +53,7 @@ class ContentItemDto {
     this.subtitle,
     this.sortOrder = 0,
     this.url,
+    this.isActive = true,
     this.subItems = const [],
   });
 
@@ -66,6 +68,7 @@ class ContentItemDto {
       subtitle: json['subtitle'] as String?,
       sortOrder: (json['sort_order'] as num?)?.toInt() ?? 0,
       url: json['url'] as String?,
+      isActive: json['is_active'] as bool? ?? true,
       subItems: subList
           .map((e) => ContentSubItemDto.fromJson(e as Map<String, dynamic>))
           .toList(),

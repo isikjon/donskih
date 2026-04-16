@@ -48,27 +48,42 @@ MAX_VIDEO_SIZE_BYTES = 200 * 1024 * 1024  # 200 MB
 # ---------------------------------------------------------------------------
 
 class _ConnectionManager:
+    """Manages WebSocket connections. Supports multiple devices per user."""
+
     def __init__(self) -> None:
-        self._connections: dict[str, WebSocket] = {}
+        self._connections: dict[str, list[WebSocket]] = {}
 
     async def connect(self, websocket: WebSocket, user_id: str) -> None:
         await websocket.accept()
-        self._connections[user_id] = websocket
-        logger.info(f"Chat WS connected: user={user_id}, total={len(self._connections)}")
+        self._connections.setdefault(user_id, []).append(websocket)
+        total = sum(len(v) for v in self._connections.values())
+        logger.info(f"Chat WS connected: user={user_id}, total_sockets={total}, users={len(self._connections)}")
 
-    def disconnect(self, user_id: str) -> None:
-        self._connections.pop(user_id, None)
-        logger.info(f"Chat WS disconnected: user={user_id}, total={len(self._connections)}")
+    def disconnect(self, user_id: str, websocket: WebSocket) -> None:
+        conns = self._connections.get(user_id, [])
+        try:
+            conns.remove(websocket)
+        except ValueError:
+            pass
+        if not conns:
+            self._connections.pop(user_id, None)
+        total = sum(len(v) for v in self._connections.values())
+        logger.info(f"Chat WS disconnected: user={user_id}, total_sockets={total}, users={len(self._connections)}")
 
     async def broadcast(self, data: dict) -> None:
-        dead: list[str] = []
-        for uid, ws in list(self._connections.items()):
-            try:
-                await ws.send_json(data)
-            except Exception:
-                dead.append(uid)
-        for uid in dead:
-            self.disconnect(uid)
+        dead: list[tuple[str, WebSocket]] = []
+        for uid, ws_list in list(self._connections.items()):
+            for ws in list(ws_list):
+                try:
+                    await ws.send_json(data)
+                except Exception:
+                    dead.append((uid, ws))
+        for uid, ws in dead:
+            self.disconnect(uid, ws)
+
+    @property
+    def online_user_ids(self) -> set[str]:
+        return set(self._connections.keys())
 
     @property
     def online_count(self) -> int:
@@ -90,20 +105,40 @@ async def _push_chat_message(sender_name: str, text: str | None, sender_user_id:
     """
     from app.api.v1.push import _send_fcm_batch
 
-    online_user_ids = set(manager._connections.keys())
+    online_user_ids = manager.online_user_ids
 
     try:
         async with async_session() as db:
-            result = await db.execute(select(DeviceToken.token, DeviceToken.user_id))
+            result = await db.execute(select(DeviceToken.token, DeviceToken.user_id, DeviceToken.platform))
             rows = result.all()
     except Exception as e:
         logger.error(f"_push_chat_message: DB error: {e}")
         return
 
-    offline_tokens = [
-        row.token for row in rows
+    offline_rows = [
+        row for row in rows
         if str(row.user_id) not in online_user_ids and str(row.user_id) != sender_user_id
     ]
+
+    for row in offline_rows:
+        logger.info(
+            f"_push_chat_message: WILL PUSH token={row.token[:12]}... "
+            f"user_id={row.user_id} platform={row.platform}"
+        )
+    for row in rows:
+        uid = str(row.user_id)
+        if uid in online_user_ids:
+            logger.info(f"_push_chat_message: SKIP ONLINE user_id={uid} token={row.token[:12]}...")
+        elif uid == sender_user_id:
+            logger.info(f"_push_chat_message: SKIP SENDER user_id={uid} token={row.token[:12]}...")
+
+    offline_tokens = [row.token for row in offline_rows]
+
+    logger.info(
+        f"_push_chat_message: total_tokens={len(rows)}, "
+        f"online_users={online_user_ids}, sender={sender_user_id}, "
+        f"offline_tokens_count={len(offline_tokens)}"
+    )
 
     if not offline_tokens:
         return
@@ -112,7 +147,18 @@ async def _push_chat_message(sender_name: str, text: str | None, sender_user_id:
     body = text or "📎 Медиафайл"
 
     try:
-        await _send_fcm_batch(title, body, offline_tokens)
+        success, failure, stale = await _send_fcm_batch(
+            title, body, offline_tokens, push_type="chat"
+        )
+        logger.info(
+            f"_push_chat_message: FCM result success={success} failure={failure} stale={len(stale)}"
+        )
+        if stale:
+            async with async_session() as db:
+                from sqlalchemy import delete as sa_delete
+                await db.execute(sa_delete(DeviceToken).where(DeviceToken.token.in_(stale)))
+                await db.commit()
+                logger.info(f"_push_chat_message: removed {len(stale)} stale tokens")
     except Exception as e:
         logger.error(f"_push_chat_message: FCM error: {e}")
 
@@ -171,10 +217,19 @@ async def chat_websocket(websocket: WebSocket, token: str) -> None:
     await manager.connect(websocket, user_id)
     try:
         while True:
-            # Keep connection alive — client can send pings
-            await websocket.receive_text()
+            try:
+                await asyncio.wait_for(websocket.receive_text(), timeout=5.0)
+            except asyncio.TimeoutError:
+                logger.info(f"Chat WS timeout (no ping in 5s): user={user_id}")
+                try:
+                    await websocket.close(code=1000)
+                except Exception:
+                    pass
+                break
     except WebSocketDisconnect:
-        manager.disconnect(user_id)
+        pass
+    finally:
+        manager.disconnect(user_id, websocket)
 
 
 # ---------------------------------------------------------------------------
@@ -389,7 +444,9 @@ def _compress_video(source: Path, output: Path, thumb: Path) -> float | None:
         return None
 
     thumb_cmd = [
-        "ffmpeg", "-y", "-ss", "00:00:01", "-i", str(output),
+        "ffmpeg", "-y",
+        "-ss", "00:00:00",
+        "-i", str(source),
         "-frames:v", "1", "-q:v", "3", str(thumb),
     ]
     subprocess.run(thumb_cmd, capture_output=True, text=True)

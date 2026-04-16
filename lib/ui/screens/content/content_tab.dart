@@ -10,6 +10,8 @@ import '../../../core/theme/app_typography.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../components/app_bookmark.dart';
 import '../../widgets/rich_description_viewer.dart';
+import '../media_viewer/media_viewer_screen.dart';
+import '../profile/notification_settings_screen.dart';
 import '../video/video_player_screen.dart';
 
 class ContentTab extends StatefulWidget {
@@ -84,10 +86,8 @@ class _ContentTabState extends State<ContentTab> {
   }
 
   void _openVideo(ContentItemDto item, {_SubLessonData? sub}) {
-    final url = (sub?.url?.trim().isNotEmpty == true
-            ? sub!.url
-            : item.url)
-        ?.trim();
+    final url =
+        (sub?.url?.trim().isNotEmpty == true ? sub!.url : item.url)?.trim();
     if (url == null || url.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Видео еще не загружено')),
@@ -174,8 +174,7 @@ class _ContentTabState extends State<ContentTab> {
                 ),
                 const SizedBox(height: 100),
                 const Center(
-                  child:
-                      CircularProgressIndicator(color: AppColors.primary),
+                  child: CircularProgressIndicator(color: AppColors.primary),
                 ),
                 const SizedBox(height: 400),
               ],
@@ -192,61 +191,82 @@ class _ContentTabState extends State<ContentTab> {
 
     list.add(Padding(
       padding: const EdgeInsets.only(bottom: 8),
-      child: Text('Главная', style: AppTypography.headlineSmall),
-    ));
-
-    list.add(Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: _ProgramBlockFromApi(
-        contentByDate: _contentByDate!,
-        onItemTap: (id) {
-          final key = _sectionKeys[id];
-          if (key != null) _scrollToSection(key);
-        },
+      child: Row(
+        children: [
+          Expanded(child: Text('Главная', style: AppTypography.headlineSmall)),
+          GestureDetector(
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => const NotificationSettingsScreen(),
+            )),
+            child: Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: AppColors.surfaceSecondary,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.notifications_outlined,
+                  color: AppColors.primary, size: 22),
+            ),
+          ),
+        ],
       ),
     ));
 
     for (final dateIso in dates) {
       final items = _contentByDate![dateIso]!;
       final dateLabel = ContentItemDto.formatDisplayDate(dateIso);
-      list.add(_DateLabel(dateLabel));
-      list.add(const SizedBox(height: 8));
       for (final item in items) {
         if (item.isVideo) {
           list.add(
-            _ExpandableLessonCard(
-              subtitle: item.subtitle,
-              key: _keyFor(item.id),
-              id: item.id,
-              title: item.title,
-              description: ContentItemDto.subtitleToPlainText(item.subtitle) ?? '',
-              videoUrl: item.url,
-              isBookmarked: _isBookmarked(item.id),
-              onBookmark: (v) => _toggleBookmark(item.id, v),
-              canPlay: (item.url ?? '').trim().isNotEmpty,
-              onPlayMain: () => _openVideo(item),
-              onPlaySubLesson: (sub) => _openVideo(item, sub: sub),
-              subLessons: item.subItems
-                  .map((s) => _SubLessonData(
-                        s.title,
-                        s.duration ?? '',
-                        description: s.description,
-                        url: s.url,
-                        thumbnailUrl: s.thumbnailUrl,
-                      ))
-                  .toList(),
+            Opacity(
+              opacity: item.isActive ? 1.0 : 0.45,
+              child: IgnorePointer(
+                ignoring: !item.isActive,
+                child: _ExpandableLessonCard(
+                  subtitle: item.subtitle,
+                  key: _keyFor(item.id),
+                  id: item.id,
+                  title: item.title,
+                  dateLabel: dateLabel,
+                  description:
+                      ContentItemDto.subtitleToPlainText(item.subtitle) ?? '',
+                  videoUrl: item.url,
+                  isBookmarked: _isBookmarked(item.id),
+                  onBookmark: (v) => _toggleBookmark(item.id, v),
+                  canPlay: item.isActive && (item.url ?? '').trim().isNotEmpty,
+                  onPlayMain: () => _openVideo(item),
+                  onPlaySubLesson: (sub) => _openVideo(item, sub: sub),
+                  subLessons: item.subItems
+                      .map((s) => _SubLessonData(
+                            s.title,
+                            s.duration ?? '',
+                            description: s.description,
+                            url: s.url,
+                            thumbnailUrl: s.thumbnailUrl,
+                          ))
+                      .toList(),
+                ),
+              ),
             ),
           );
         } else {
           list.add(
-            _ChecklistCard(
-              key: _keyFor(item.id),
-              title: item.title,
-              description: ContentItemDto.subtitleToPlainText(item.subtitle) ?? '',
-              fileUrl: item.url,
-              isBookmarked: _isBookmarked(item.id),
-              onBookmark: (v) => _toggleBookmark(item.id, v),
-              onTap: () => _openChecklist(item),
+            Opacity(
+              opacity: item.isActive ? 1.0 : 0.45,
+              child: IgnorePointer(
+                ignoring: !item.isActive,
+                child: _ChecklistCard(
+                  key: _keyFor(item.id),
+                  title: item.title,
+                  description:
+                      ContentItemDto.subtitleToPlainText(item.subtitle) ?? '',
+                  fileUrl: item.url,
+                  isBookmarked: _isBookmarked(item.id),
+                  onBookmark: (v) => _toggleBookmark(item.id, v),
+                  onTap: () => _openChecklist(item),
+                ),
+              ),
             ),
           );
         }
@@ -284,16 +304,11 @@ class _ContentTabState extends State<ContentTab> {
           padding: const EdgeInsets.only(bottom: 8),
           child: Text('Главная', style: AppTypography.headlineSmall),
         ),
-        Padding(
-          padding: const EdgeInsets.only(bottom: 12),
-          child: _ProgramBlock(onItemTap: (_) {}),
-        ),
-        _DateLabel('06 февраля'),
-        const SizedBox(height: 8),
         _ExpandableLessonCard(
           key: keys['nude_look']!,
           id: 'nude_look',
           title: 'Макияж «Нюдовый образ»',
+          dateLabel: '06 февраля',
           description: 'Красивый натуральный макияж на каждый день',
           videoUrl: null,
           isBookmarked: _isBookmarked('nude_look'),
@@ -313,6 +328,7 @@ class _ContentTabState extends State<ContentTab> {
           key: keys['skin_care']!,
           id: 'skin_care',
           title: 'Уход за кожей зимой',
+          dateLabel: '06 февраля',
           description: 'Увлажнение и защита в холодное время',
           videoUrl: null,
           isBookmarked: _isBookmarked('skin_care'),
@@ -327,12 +343,11 @@ class _ContentTabState extends State<ContentTab> {
           ],
         ),
         const SizedBox(height: 16),
-        _DateLabel('07 февраля'),
-        const SizedBox(height: 8),
         _ExpandableLessonCard(
           key: keys['brows']!,
           id: 'brows',
           title: 'Макияж бровей',
+          dateLabel: '07 февраля',
           description: 'Оформление бровей карандашом и гелем',
           videoUrl: null,
           isBookmarked: _isBookmarked('brows'),
@@ -347,12 +362,11 @@ class _ContentTabState extends State<ContentTab> {
           ],
         ),
         const SizedBox(height: 16),
-        _DateLabel('10 февраля'),
-        const SizedBox(height: 8),
         _ExpandableLessonCard(
           key: keys['eyes']!,
           id: 'eyes',
           title: 'Макияж глаз: стрелки',
+          dateLabel: '10 февраля',
           description: 'Идеальные стрелки разными способами',
           videoUrl: null,
           isBookmarked: _isBookmarked('eyes'),
@@ -367,12 +381,11 @@ class _ContentTabState extends State<ContentTab> {
           ],
         ),
         const SizedBox(height: 16),
-        _DateLabel('14 февраля'),
-        const SizedBox(height: 8),
         _ExpandableLessonCard(
           key: keys['romantic']!,
           id: 'romantic',
           title: 'Романтичный макияж',
+          dateLabel: '14 февраля',
           description: 'Нежный образ для свидания',
           videoUrl: null,
           isBookmarked: _isBookmarked('romantic'),
@@ -410,22 +423,6 @@ class _ContentTabState extends State<ContentTab> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (_) => _PdfMockViewer(title: title),
-    );
-  }
-}
-
-class _DateLabel extends StatelessWidget {
-  final String text;
-  const _DateLabel(this.text);
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      text,
-      style: AppTypography.labelMedium.copyWith(
-        color: AppColors.textTertiary,
-        fontWeight: FontWeight.w600,
-      ),
     );
   }
 }
@@ -530,6 +527,7 @@ class _LinkedTextState extends State<_LinkedText> {
 class _ExpandableLessonCard extends StatefulWidget {
   final String id;
   final String title;
+  final String? dateLabel;
   final String description;
   final String? subtitle;
   final String? videoUrl;
@@ -544,6 +542,7 @@ class _ExpandableLessonCard extends StatefulWidget {
     super.key,
     required this.id,
     required this.title,
+    this.dateLabel,
     required this.description,
     this.subtitle,
     required this.videoUrl,
@@ -590,15 +589,16 @@ class _ExpandableLessonCardState extends State<_ExpandableLessonCard>
     if (url == null || url.trim().isEmpty) return null;
     final uri = Uri.tryParse(url.trim());
     if (uri == null || !uri.path.endsWith('/index.m3u8')) return null;
-    return uri.replace(
-      path: uri.path.replaceFirst(RegExp(r'/index\.m3u8$'), '/thumb.jpg'),
-    ).toString();
+    return uri
+        .replace(
+          path: uri.path.replaceFirst(RegExp(r'/index\.m3u8$'), '/thumb.jpg'),
+        )
+        .toString();
   }
 
   String? _thumbUrl() {
     final first = widget.subLessons.isNotEmpty ? widget.subLessons.first : null;
-    if (first != null &&
-        first.thumbnailUrl?.trim().isNotEmpty == true) {
+    if (first != null && first.thumbnailUrl?.trim().isNotEmpty == true) {
       return first.thumbnailUrl;
     }
     final u = _videoToThumb(widget.videoUrl?.trim());
@@ -627,6 +627,7 @@ class _ExpandableLessonCardState extends State<_ExpandableLessonCard>
           Padding(
             padding: const EdgeInsets.all(12),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (thumbUrl != null)
                   InkWell(
@@ -686,15 +687,26 @@ class _ExpandableLessonCardState extends State<_ExpandableLessonCard>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      if (widget.dateLabel != null) ...[
+                        Text(
+                          widget.dateLabel!,
+                          style: AppTypography.labelSmall.copyWith(
+                            color: AppColors.textTertiary,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                      ],
                       Text(widget.title,
-                          style: AppTypography.titleSmall,
-                          maxLines: 1,
+                          style: AppTypography.titleSmall
+                              .copyWith(fontWeight: FontWeight.w600),
+                          maxLines: 2,
                           overflow: TextOverflow.ellipsis),
                       if (widget.description.isNotEmpty) ...[
                         const SizedBox(height: 2),
                         _LinkedText(
                           text: widget.description,
-                          style: AppTypography.bodySmall,
+                          style: AppTypography.bodySmall
+                              .copyWith(color: AppColors.textSecondary),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -792,183 +804,198 @@ class _SubLessonCarouselState extends State<_SubLessonCarousel> {
     if (uri == null || !uri.path.endsWith('/index.m3u8')) return null;
     return uri
         .replace(
-            path: uri.path
-                .replaceFirst(RegExp(r'/index\.m3u8$'), '/thumb.jpg'))
+            path: uri.path.replaceFirst(RegExp(r'/index\.m3u8$'), '/thumb.jpg'))
         .toString();
   }
 
   static const _descAreaHeight = 180.0;
+
+  bool _isImageOnly(_SubLessonData sub) {
+    return (sub.url == null || sub.url!.trim().isEmpty) &&
+        sub.thumbnailUrl != null &&
+        sub.thumbnailUrl!.trim().isNotEmpty;
+  }
+
+  void _openImageFullscreen(
+      BuildContext context, String imageUrl, String title) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => MediaViewerScreen(
+          imageUrls: [imageUrl],
+          caption: title,
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(builder: (context, constraints) {
       final thumbWidth = constraints.maxWidth - 24;
       final thumbHeight = thumbWidth * 16 / 9;
-      final thumbSectionHeight = 44 + thumbHeight;
-      final currentSub = widget.subLessons[
-          _currentPage.clamp(0, widget.subLessons.length - 1)];
-      final currentHasDescription = currentSub.description != null &&
-          currentSub.description!.trim().isNotEmpty;
-      final carouselHeight = thumbSectionHeight +
-          (currentHasDescription ? _descAreaHeight : 0.0);
+      final thumbSectionHeight = 44.0 + thumbHeight;
+      final anyHasDescription = widget.subLessons.any(
+          (s) => s.description != null && s.description!.trim().isNotEmpty);
+      final carouselHeight =
+          thumbSectionHeight + (anyHasDescription ? _descAreaHeight : 0.0);
 
       return Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          AnimatedSize(
-            duration: const Duration(milliseconds: 250),
-            curve: Curves.easeOut,
-            child: SizedBox(
-              height: carouselHeight,
-              child: PageView.builder(
-                controller: _pageController,
-                itemCount: widget.subLessons.length,
-                onPageChanged: (i) => setState(() => _currentPage = i),
-                itemBuilder: (context, index) {
-                  final sub = widget.subLessons[index];
-                  final videoUrl = (sub.url?.trim().isNotEmpty == true)
-                      ? sub.url
-                      : widget.parentVideoUrl;
-                  final thumbUrl = sub.thumbnailUrl?.trim().isNotEmpty == true
-                      ? sub.thumbnailUrl
-                      : _thumbUrl(videoUrl);
-                  final canPlay = (sub.url?.trim().isNotEmpty ?? false) ||
-                      widget.canPlayParent;
-                  final hasDescription = sub.description != null &&
-                      sub.description!.trim().isNotEmpty;
+          SizedBox(
+            height: carouselHeight,
+            child: PageView.builder(
+              controller: _pageController,
+              itemCount: widget.subLessons.length,
+              onPageChanged: (i) => setState(() => _currentPage = i),
+              itemBuilder: (context, index) {
+                final sub = widget.subLessons[index];
+                final isImage = _isImageOnly(sub);
+                final videoUrl = (sub.url?.trim().isNotEmpty == true)
+                    ? sub.url
+                    : widget.parentVideoUrl;
+                final thumbUrl = sub.thumbnailUrl?.trim().isNotEmpty == true
+                    ? sub.thumbnailUrl
+                    : _thumbUrl(videoUrl);
+                final hasVideo = (sub.url?.trim().isNotEmpty ?? false) ||
+                    widget.canPlayParent;
+                final hasDescription = sub.description != null &&
+                    sub.description!.trim().isNotEmpty;
 
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const SizedBox(height: 12),
-                        Text(sub.title,
-                            style: AppTypography.titleSmall
-                                .copyWith(fontWeight: FontWeight.w600),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis),
-                        const SizedBox(height: 8),
-                        GestureDetector(
-                          onTap: canPlay
-                              ? () => widget.onPlaySubLesson(sub)
-                              : null,
-                          child: AspectRatio(
-                            aspectRatio: 9 / 16,
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: AppColors.surfaceSecondary,
-                                borderRadius: BorderRadius.circular(14),
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SizedBox(height: 12),
+                      Text(sub.title,
+                          style: AppTypography.titleSmall
+                              .copyWith(fontWeight: FontWeight.w600),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis),
+                      const SizedBox(height: 8),
+                      GestureDetector(
+                        onTap: isImage
+                            ? () => _openImageFullscreen(
+                                context, thumbUrl!, sub.title)
+                            : (hasVideo
+                                ? () => widget.onPlaySubLesson(sub)
+                                : null),
+                        child: AspectRatio(
+                          aspectRatio: 9 / 16,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: AppColors.surfaceSecondary,
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(14),
+                              child: Stack(
+                                fit: StackFit.expand,
+                                children: [
+                                  if (thumbUrl != null)
+                                    CachedNetworkImage(
+                                      imageUrl: thumbUrl,
+                                      fit: BoxFit.cover,
+                                      placeholder: (_, __) => Container(
+                                          color: AppColors.surfaceSecondary),
+                                      errorWidget: (_, __, ___) =>
+                                          const SizedBox(),
+                                    ),
+                                  if (!isImage &&
+                                      contentThumbnailIsVideoPosterFrame(
+                                          thumbUrl))
+                                    Container(
+                                      color: Colors.black.withValues(
+                                          alpha: thumbUrl != null ? 0.15 : 0),
+                                    ),
+                                  if (!isImage &&
+                                      contentThumbnailIsVideoPosterFrame(
+                                          thumbUrl))
+                                    Center(
+                                      child: Container(
+                                        width: 56,
+                                        height: 56,
+                                        decoration: BoxDecoration(
+                                          color: Colors.white
+                                              .withValues(alpha: 0.9),
+                                          shape: BoxShape.circle,
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: Colors.black
+                                                  .withValues(alpha: 0.15),
+                                              blurRadius: 12,
+                                            ),
+                                          ],
+                                        ),
+                                        child: Icon(
+                                          Icons.play_arrow_rounded,
+                                          color: hasVideo
+                                              ? AppColors.primary
+                                              : AppColors.textTertiary,
+                                          size: 32,
+                                        ),
+                                      ),
+                                    ),
+                                  if (sub.duration.isNotEmpty)
+                                    Positioned(
+                                      bottom: 10,
+                                      right: 10,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 10, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: Colors.black54,
+                                          borderRadius:
+                                              BorderRadius.circular(8),
+                                        ),
+                                        child: Text(
+                                          sub.duration,
+                                          style: AppTypography.labelSmall
+                                              .copyWith(color: Colors.white),
+                                        ),
+                                      ),
+                                    ),
+                                ],
                               ),
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(14),
-                                child: Stack(
-                                  fit: StackFit.expand,
-                                  children: [
-                                    if (thumbUrl != null)
-                                      CachedNetworkImage(
-                                        imageUrl: thumbUrl,
-                                        fit: BoxFit.cover,
-                                        placeholder: (_, __) => Container(
-                                            color:
-                                                AppColors.surfaceSecondary),
-                                        errorWidget: (_, __, ___) =>
-                                            const SizedBox(),
-                                      ),
-                                    if (contentThumbnailIsVideoPosterFrame(
-                                        thumbUrl))
-                                      Container(
-                                        color: Colors.black.withValues(
-                                            alpha: thumbUrl != null
-                                                ? 0.15
-                                                : 0),
-                                      ),
-                                    if (contentThumbnailIsVideoPosterFrame(
-                                        thumbUrl))
-                                      Center(
-                                        child: Container(
-                                          width: 56,
-                                          height: 56,
-                                          decoration: BoxDecoration(
-                                            color: Colors.white
-                                                .withValues(alpha: 0.9),
-                                            shape: BoxShape.circle,
-                                            boxShadow: [
-                                              BoxShadow(
-                                                color: Colors.black
-                                                    .withValues(alpha: 0.15),
-                                                blurRadius: 12,
-                                              ),
-                                            ],
-                                          ),
-                                          child: Icon(
-                                            Icons.play_arrow_rounded,
-                                            color: canPlay
-                                                ? AppColors.primary
-                                                : AppColors.textTertiary,
-                                            size: 32,
-                                          ),
-                                        ),
-                                      ),
-                                    if (sub.duration.isNotEmpty)
-                                      Positioned(
-                                        bottom: 10,
-                                        right: 10,
-                                        child: Container(
-                                          padding:
-                                              const EdgeInsets.symmetric(
-                                                  horizontal: 10,
-                                                  vertical: 4),
-                                          decoration: BoxDecoration(
-                                            color: Colors.black54,
-                                            borderRadius:
-                                                BorderRadius.circular(8),
-                                          ),
-                                          child: Text(
-                                            sub.duration,
-                                            style: AppTypography.labelSmall
-                                                .copyWith(
-                                                    color: Colors.white),
-                                          ),
-                                        ),
-                                      ),
-                                  ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      if (hasDescription) ...[
+                        const SizedBox(height: 10),
+                        Expanded(
+                          child: ShaderMask(
+                            shaderCallback: (bounds) => LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: const [
+                                Colors.white,
+                                Colors.white,
+                                Colors.white,
+                                Colors.transparent
+                              ],
+                              stops: const [0.0, 0.7, 0.85, 1.0],
+                            ).createShader(bounds),
+                            blendMode: BlendMode.dstIn,
+                            child: SingleChildScrollView(
+                              physics: const ClampingScrollPhysics(),
+                              child: Padding(
+                                padding: const EdgeInsets.only(bottom: 16),
+                                child: RichDescriptionViewer(
+                                  subtitle: sub.description!,
+                                  textStyle: AppTypography.bodySmall
+                                      .copyWith(color: AppColors.textSecondary),
                                 ),
                               ),
                             ),
                           ),
                         ),
-                          if (hasDescription) ...[
-                            const SizedBox(height: 10),
-                            Expanded(
-                              child: ShaderMask(
-                                shaderCallback: (bounds) => LinearGradient(
-                                  begin: Alignment.topCenter,
-                                  end: Alignment.bottomCenter,
-                                  colors: const [Colors.white, Colors.white, Colors.white, Colors.transparent],
-                                  stops: const [0.0, 0.7, 0.85, 1.0],
-                                ).createShader(bounds),
-                                blendMode: BlendMode.dstIn,
-                                child: SingleChildScrollView(
-                                  physics: const ClampingScrollPhysics(),
-                                  child: Padding(
-                                    padding: const EdgeInsets.only(bottom: 16),
-                                    child: RichDescriptionViewer(
-                                      subtitle: sub.description!,
-                                      textStyle: AppTypography.bodySmall
-                                          .copyWith(color: AppColors.textSecondary),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
                       ],
-                    ),
-                  );
-                },
-              ),
+                    ],
+                  ),
+                );
+              },
             ),
           ),
           if (widget.subLessons.length > 1)
@@ -976,8 +1003,7 @@ class _SubLessonCarouselState extends State<_SubLessonCarousel> {
               padding: const EdgeInsets.only(top: 12, bottom: 12),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
-                children:
-                    List.generate(widget.subLessons.length, (i) {
+                children: List.generate(widget.subLessons.length, (i) {
                   final isActive = i == _currentPage;
                   return AnimatedContainer(
                     duration: const Duration(milliseconds: 200),
@@ -985,8 +1011,7 @@ class _SubLessonCarouselState extends State<_SubLessonCarousel> {
                     height: 8,
                     margin: const EdgeInsets.symmetric(horizontal: 3),
                     decoration: BoxDecoration(
-                      color:
-                          isActive ? AppColors.primary : AppColors.border,
+                      color: isActive ? AppColors.primary : AppColors.border,
                       borderRadius: BorderRadius.circular(4),
                     ),
                   );

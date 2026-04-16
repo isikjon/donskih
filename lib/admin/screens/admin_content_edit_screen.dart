@@ -149,6 +149,7 @@ class _AdminContentEditScreenState extends State<AdminContentEditScreen> {
   bool _saving = false;
   String? _error;
   bool _initialized = false;
+  bool _isActive = true;
 
   // Checklist-specific
   final _checklistUrlController = TextEditingController();
@@ -177,6 +178,7 @@ class _AdminContentEditScreenState extends State<AdminContentEditScreen> {
       _titleController.text = args['title'] as String? ?? '';
       _initQuillFromSubtitle(args['subtitle'] as String?);
       _sortOrder = (args['sort_order'] as num?)?.toInt() ?? 0;
+      _isActive = args['is_active'] as bool? ?? true;
 
       if (_type == 'checklist') {
         _checklistUrlController.text = args['url'] as String? ?? '';
@@ -602,6 +604,7 @@ class _AdminContentEditScreenState extends State<AdminContentEditScreen> {
           ? null
           : jsonEncode(_quillController!.document.toDelta().toJson()),
       'sort_order': _sortOrder,
+      'is_active': _isActive,
     };
 
     if (_type == 'checklist') {
@@ -732,6 +735,17 @@ class _AdminContentEditScreenState extends State<AdminContentEditScreen> {
               ),
             ),
             const SizedBox(height: 12),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Активен'),
+              subtitle: Text(_isActive
+                  ? 'Урок виден пользователям'
+                  : 'Скрыт (приглушённый)'),
+              value: _isActive,
+              activeColor: AppColors.primary,
+              onChanged: (v) => setState(() => _isActive = v),
+            ),
+            const SizedBox(height: 8),
             ListTile(
               contentPadding: EdgeInsets.zero,
               title: const Text('Дата публикации'),

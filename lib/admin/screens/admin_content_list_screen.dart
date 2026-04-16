@@ -183,15 +183,18 @@ class _AdminContentListBodyState extends State<AdminContentListBody> {
       ));
       for (final item in byDate[date]!) {
         final type = item['type'] as String? ?? 'video';
-        list.add(Card(
+        final isActive = item['is_active'] as bool? ?? true;
+        list.add(Opacity(
+          opacity: isActive ? 1.0 : 0.5,
+          child: Card(
           margin: const EdgeInsets.only(bottom: 10),
           child: ListTile(
             leading: Icon(
               type == 'video' ? Icons.play_circle_outline : Icons.checklist_rounded,
-              color: AppColors.primary,
+              color: isActive ? AppColors.primary : AppColors.textTertiary,
             ),
             title: Text(
-              item['title'] as String? ?? '',
+              '${isActive ? '' : '⏸ '}${item['title'] as String? ?? ''}',
               style: AppTypography.titleSmall,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -219,7 +222,7 @@ class _AdminContentListBodyState extends State<AdminContentListBody> {
             ),
             onTap: () => _editContent(item),
           ),
-        ));
+        )));
       }
     }
     list.add(const SizedBox(height: 100));

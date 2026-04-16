@@ -43,4 +43,13 @@ post_install do |installer|
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
     end
   end
+
+  # Fix Flutter-generated SPM Package.swift to match our deployment target.
+  spm_package = File.join(__dir__, 'Flutter', 'ephemeral', 'Packages',
+                          'FlutterGeneratedPluginSwiftPackage', 'Package.swift')
+  if File.exist?(spm_package)
+    content = File.read(spm_package)
+    fixed = content.gsub(/\.iOS\("[\d.]+"\)/, '.iOS("15.0")')
+    File.write(spm_package, fixed) if content != fixed
+  end
 end

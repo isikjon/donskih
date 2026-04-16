@@ -42,6 +42,7 @@ app.add_middleware(
 )
 
 app.include_router(auth.router, prefix="/api/v1")
+app.include_router(auth.router_email, prefix="/api/v1")
 app.include_router(users.router, prefix="/api/v1")
 app.include_router(bot_webhook.router, prefix="/api/v1")
 app.include_router(subscription.router, prefix="/api/v1")

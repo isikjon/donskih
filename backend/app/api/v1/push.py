@@ -186,6 +186,34 @@ async def devices_count(db: AsyncSession = Depends(get_db)):
 
 
 # ---------------------------------------------------------------------------
+# Admin: diagnostic — list all tokens with user info
+# ---------------------------------------------------------------------------
+
+@router.get("/admin/push/tokens", dependencies=[Depends(require_admin)])
+async def list_tokens(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(DeviceToken, User.phone)
+        .join(User, DeviceToken.user_id == User.id)
+        .order_by(DeviceToken.updated_at.desc())
+    )
+    rows = result.all()
+    return {
+        "tokens": [
+            {
+                "token_prefix": dt.token[:12],
+                "token_full": dt.token,
+                "platform": dt.platform,
+                "user_id": str(dt.user_id),
+                "phone": phone,
+                "created_at": dt.created_at.isoformat() if dt.created_at else None,
+                "updated_at": dt.updated_at.isoformat() if dt.updated_at else None,
+            }
+            for dt, phone in rows
+        ]
+    }
+
+
+# ---------------------------------------------------------------------------
 # FCM HTTP v1 API
 # ---------------------------------------------------------------------------
 
@@ -244,9 +272,12 @@ async def _get_google_access_token() -> str:
     return data["access_token"]
 
 
-async def _send_fcm_batch(title: str, body: str, tokens: List[str]) -> tuple[int, int, List[str]]:
+async def _send_fcm_batch(
+    title: str, body: str, tokens: List[str], *, push_type: str = "admin"
+) -> tuple[int, int, List[str]]:
     """Send push notifications via FCM HTTP v1 API concurrently.
 
+    push_type: "admin" | "chat" | "lesson"
     Returns (success_count, failure_count, stale_tokens).
     Stale tokens (404 from FCM) should be removed from DB by the caller.
     """
@@ -267,6 +298,28 @@ async def _send_fcm_batch(title: str, body: str, tokens: List[str]) -> tuple[int
             "message": {
                 "token": token,
                 "notification": {"title": title, "body": body},
+                "data": {"type": push_type},
+                "apns": {
+                    "headers": {
+                        "apns-push-type": "alert",
+                        "apns-priority": "10",
+                    },
+                    "payload": {
+                        "aps": {
+                            "alert": {"title": title, "body": body},
+                            "sound": "default",
+                            "badge": 1,
+                            "mutable-content": 1,
+                        }
+                    }
+                },
+                "android": {
+                    "priority": "high",
+                    "notification": {
+                        "sound": "default",
+                        "channel_id": "donskih_push_channel",
+                    }
+                },
             }
         }
         async with semaphore:
@@ -277,12 +330,16 @@ async def _send_fcm_batch(title: str, body: str, tokens: List[str]) -> tuple[int
                     headers={"Authorization": f"Bearer {access_token}"},
                 )
                 if resp.status_code == 200:
+                    resp_data = resp.json()
+                    msg_name = resp_data.get("name", "unknown")
+                    logger.info(f"FCM 200 OK token={token[:12]}... fcm_msg={msg_name}")
                     return None, True
-                if resp.status_code == 404:
+                logger.warning(f"FCM {resp.status_code} for {token[:12]}...: {resp.text}")
+                if resp.status_code in (404, 400):
                     return token, False
                 return None, False
             except Exception as e:
-                logger.error(f"FCM send error for token {token[:20]}...: {e}")
+                logger.error(f"FCM send error for token {token[:12]}...: {e}")
                 return None, False
 
     async with httpx.AsyncClient(timeout=30) as client:

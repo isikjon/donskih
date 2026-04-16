@@ -143,16 +143,18 @@ async def _convert_video_task(task_id: str, source: Path, folder: Path, upload_r
             )
             return
 
-        source.unlink(missing_ok=True)
-
-        # Generate thumbnail
+        # Generate thumbnail from the SOURCE file at exactly 00:00:00 (before deleting it)
         _conversion_tasks[task_id]["status"] = "thumbnail"
         thumbnail = folder / "thumb.jpg"
         thumb_cmd = [
-            "ffmpeg", "-y", "-ss", "00:00:03", "-i", str(playlist),
+            "ffmpeg", "-y",
+            "-ss", "00:00:00",
+            "-i", str(source),
             "-frames:v", "1", "-q:v", "2", str(thumbnail),
         ]
         await asyncio.to_thread(subprocess.run, thumb_cmd, capture_output=True, text=True)
+
+        source.unlink(missing_ok=True)
 
         rel = playlist.relative_to(upload_root).as_posix()
         thumb_rel = thumbnail.relative_to(upload_root).as_posix() if thumbnail.exists() else None
@@ -298,8 +300,6 @@ async def upload_checklist_file(
     thumb_cmd = [
         "ffmpeg",
         "-y",
-        "-ss",
-        "00:00:01",
         "-i",
         str(target),
         "-frames:v",
@@ -355,6 +355,7 @@ async def admin_create_content(
         subtitle=body.subtitle,
         sort_order=body.sort_order,
         url=body.url,
+        is_active=body.is_active,
     )
     db.add(item)
     await db.flush()
@@ -372,7 +373,43 @@ async def admin_create_content(
     await db.commit()
     await db.refresh(item)
     await db.refresh(item, ["sub_items"])
+
+    if item.is_active:
+        asyncio.create_task(_notify_new_content(item.title, db))
+
     return content_item_to_out(item)
+
+
+async def _notify_new_content(title: str, _unused_db: AsyncSession) -> None:
+    """Push notification to all devices when new content is published."""
+    from app.api.v1.push import _send_fcm_batch
+    from app.database import async_session
+    from app.models.push import DeviceToken
+
+    try:
+        async with async_session() as db:
+            result = await db.execute(select(DeviceToken.token))
+            tokens = [r[0] for r in result.all()]
+
+        if not tokens:
+            return
+
+        push_title = "Новый урок"
+        push_body = title or "Доступен новый материал"
+        success, failure, stale = await _send_fcm_batch(
+            push_title, push_body, tokens, push_type="lesson"
+        )
+        logger.info(
+            f"New content push: success={success} failure={failure} stale={len(stale)}"
+        )
+
+        if stale:
+            from sqlalchemy import delete as sa_delete
+            async with async_session() as db:
+                await db.execute(sa_delete(DeviceToken).where(DeviceToken.token.in_(stale)))
+                await db.commit()
+    except Exception as e:
+        logger.error(f"Failed to send new content push: {e}")
 
 
 @router.get("/{item_id}", response_model=ContentItemOut)
@@ -407,6 +444,7 @@ async def admin_update_content(
     item = result.scalar_one_or_none()
     if not item:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Content not found")
+    was_inactive = not item.is_active
     if body.section is not None:
         item.section = body.section
     if body.display_date is not None:
@@ -419,6 +457,8 @@ async def admin_update_content(
         item.sort_order = body.sort_order
     if body.url is not None:
         item.url = body.url
+    if body.is_active is not None:
+        item.is_active = body.is_active
     if body.sub_items is not None:
         for sub in item.sub_items:
             await db.delete(sub)
@@ -436,6 +476,10 @@ async def admin_update_content(
     await db.commit()
     await db.refresh(item)
     await db.refresh(item, ["sub_items"])
+
+    if was_inactive and item.is_active:
+        asyncio.create_task(_notify_new_content(item.title, db))
+
     return content_item_to_out(item)
 
 

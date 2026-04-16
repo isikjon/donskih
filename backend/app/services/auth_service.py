@@ -16,13 +16,30 @@ from app.services.avatar_store import download_and_store_avatar, fetch_and_store
 
 
 class AuthService:
-    async def get_or_create_user(self, db: AsyncSession, phone: str) -> User:
-        result = await db.execute(select(User).where(User.phone == phone))
+    async def get_or_create_user(
+        self, db: AsyncSession, phone_or_email: str, bot_id: int | None = None
+    ) -> User:
+        if bot_id is not None:
+            result = await db.execute(select(User).where(User.bot_id == bot_id))
+            user = result.scalar_one_or_none()
+            if user:
+                return user
+            result = await db.execute(select(User).where(User.email == phone_or_email))
+            user = result.scalar_one_or_none()
+            if user:
+                user.bot_id = bot_id
+                return user
+            user = User(email=phone_or_email, bot_id=bot_id)
+            db.add(user)
+            await db.flush()
+            return user
+
+        result = await db.execute(select(User).where(User.phone == phone_or_email))
         user = result.scalar_one_or_none()
         if user:
             return user
 
-        user = User(phone=phone)
+        user = User(phone=phone_or_email)
         db.add(user)
         await db.flush()
         return user

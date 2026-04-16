@@ -17,14 +17,14 @@ import '../../components/app_text_field.dart';
 // ---------------------------------------------------------------------------
 
 class _Country {
-  final String flagUrl; // Apple emoji PNG from CDN
+  final String flag; // emoji character
   final String name;
   final String prefix;
-  final String mask;    // # = digit placeholder
+  final String mask; // # = digit placeholder
   final String hint;
 
   const _Country({
-    required this.flagUrl,
+    required this.flag,
     required this.name,
     required this.prefix,
     required this.mask,
@@ -32,26 +32,125 @@ class _Country {
   });
 }
 
-// Apple emoji CDN (jsdelivr)
-const _appleEmojiBase =
-    'https://cdn.jsdelivr.net/npm/emoji-datasource-apple/img/apple/64';
-
 const _countries = [
   _Country(
-    // 🇷🇺 = 1f1f7-1f1fa
-    flagUrl: '$_appleEmojiBase/1f1f7-1f1fa.png',
+    flag: '🇷🇺',
     name: 'Россия',
     prefix: '+7',
     mask: '+7 (###) ###-##-##',
     hint: '+7 (999) 123-45-67',
   ),
   _Country(
-    // 🇺🇿 = 1f1fa-1f1ff
-    flagUrl: '$_appleEmojiBase/1f1fa-1f1ff.png',
+    flag: '🇰🇿',
+    name: 'Казахстан',
+    prefix: '+7',
+    mask: '+7 (###) ###-##-##',
+    hint: '+7 (701) 123-45-67',
+  ),
+  _Country(
+    flag: '🇺🇿',
     name: 'Узбекистан',
     prefix: '+998',
     mask: '+998 ## ###-##-##',
     hint: '+998 90 123-45-67',
+  ),
+  _Country(
+    flag: '🇧🇾',
+    name: 'Беларусь',
+    prefix: '+375',
+    mask: '+375 ## ###-##-##',
+    hint: '+375 29 123-45-67',
+  ),
+  _Country(
+    flag: '🇺🇦',
+    name: 'Украина',
+    prefix: '+380',
+    mask: '+380 ## ###-##-##',
+    hint: '+380 50 123-45-67',
+  ),
+  _Country(
+    flag: '🇰🇬',
+    name: 'Кыргызстан',
+    prefix: '+996',
+    mask: '+996 ### ###-###',
+    hint: '+996 555 123-456',
+  ),
+  _Country(
+    flag: '🇹🇯',
+    name: 'Таджикистан',
+    prefix: '+992',
+    mask: '+992 ## ###-##-##',
+    hint: '+992 90 123-45-67',
+  ),
+  _Country(
+    flag: '🇹🇲',
+    name: 'Туркменистан',
+    prefix: '+993',
+    mask: '+993 ## ##-##-##',
+    hint: '+993 65 12-34-56',
+  ),
+  _Country(
+    flag: '🇬🇪',
+    name: 'Грузия',
+    prefix: '+995',
+    mask: '+995 ### ##-##-##',
+    hint: '+995 555 12-34-56',
+  ),
+  _Country(
+    flag: '🇦🇲',
+    name: 'Армения',
+    prefix: '+374',
+    mask: '+374 ## ###-###',
+    hint: '+374 91 123-456',
+  ),
+  _Country(
+    flag: '🇦🇿',
+    name: 'Азербайджан',
+    prefix: '+994',
+    mask: '+994 ## ###-##-##',
+    hint: '+994 50 123-45-67',
+  ),
+  _Country(
+    flag: '🇲🇩',
+    name: 'Молдова',
+    prefix: '+373',
+    mask: '+373 ## ###-###',
+    hint: '+373 69 123-456',
+  ),
+  _Country(
+    flag: '🇹🇷',
+    name: 'Турция',
+    prefix: '+90',
+    mask: '+90 ### ### ## ##',
+    hint: '+90 555 123 45 67',
+  ),
+  _Country(
+    flag: '🇮🇱',
+    name: 'Израиль',
+    prefix: '+972',
+    mask: '+972 ## ###-##-##',
+    hint: '+972 50 123-45-67',
+  ),
+  _Country(
+    flag: '🇦🇪',
+    name: 'ОАЭ',
+    prefix: '+971',
+    mask: '+971 ## ###-####',
+    hint: '+971 50 123-4567',
+  ),
+  _Country(
+    flag: '🇩🇪',
+    name: 'Германия',
+    prefix: '+49',
+    mask: '+49 ### ########',
+    hint: '+49 170 12345678',
+  ),
+  _Country(
+    flag: '🇺🇸',
+    name: 'США',
+    prefix: '+1',
+    mask: '+1 (###) ###-####',
+    hint: '+1 (555) 123-4567',
   ),
 ];
 
@@ -73,9 +172,8 @@ class _PhoneMaskFormatter extends TextInputFormatter {
     final digits = newValue.text.replaceAll(RegExp(r'\D'), '');
 
     // Count digits in the prefix (non-# chars before first #)
-    final prefixDigits = mask
-        .substring(0, mask.indexOf('#'))
-        .replaceAll(RegExp(r'\D'), '');
+    final prefixDigits =
+        mask.substring(0, mask.indexOf('#')).replaceAll(RegExp(r'\D'), '');
 
     // The digits the user typed (without prefix digits)
     final userDigits = digits.startsWith(prefixDigits)
@@ -313,7 +411,8 @@ class _AuthScreenState extends State<AuthScreen> with WidgetsBindingObserver {
     } else {
       setState(() {
         _isLoading = false;
-        _error = 'Telegram ещё не привязан.\nНажмите Start в боте и поделитесь контактом.';
+        _error =
+            'Telegram ещё не привязан.\nНажмите Start в боте и поделитесь контактом.';
       });
     }
   }
@@ -336,29 +435,31 @@ class _AuthScreenState extends State<AuthScreen> with WidgetsBindingObserver {
                     color: AppColors.surface,
                     borderRadius: BorderRadius.circular(20),
                     boxShadow: const [
-                      BoxShadow(color: AppColors.shadow, blurRadius: 20, offset: Offset(0, 4)),
+                      BoxShadow(
+                          color: AppColors.shadow,
+                          blurRadius: 20,
+                          offset: Offset(0, 4)),
                     ],
                   ),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(20),
-                    child: Image.asset('assets/images/logo.png', fit: BoxFit.cover),
+                    child: Image.asset('assets/images/logo.png',
+                        fit: BoxFit.cover),
                   ),
                 ),
                 const SizedBox(height: 32),
-
                 Text(_title, style: AppTypography.displaySmall),
                 const SizedBox(height: 8),
                 Text(
                   _subtitle,
-                  style: AppTypography.bodyMedium.copyWith(color: AppColors.textSecondary),
+                  style: AppTypography.bodyMedium
+                      .copyWith(color: AppColors.textSecondary),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 40),
-
                 if (_step == _AuthStep.phone) _buildPhoneStep(),
                 if (_step == _AuthStep.code) _buildCodeStep(),
                 if (_step == _AuthStep.linkTelegram) _buildLinkStep(),
-
                 if (_error != null) ...[
                   const SizedBox(height: 16),
                   Container(
@@ -366,11 +467,13 @@ class _AuthScreenState extends State<AuthScreen> with WidgetsBindingObserver {
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
                       color: AppColors.error.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(AppSpacing.radiusSmall),
+                      borderRadius:
+                          BorderRadius.circular(AppSpacing.radiusSmall),
                     ),
                     child: Text(
                       _error!,
-                      style: AppTypography.bodySmall.copyWith(color: AppColors.error),
+                      style: AppTypography.bodySmall
+                          .copyWith(color: AppColors.error),
                       textAlign: TextAlign.center,
                     ),
                   ),
@@ -565,50 +668,81 @@ class _CountrySelector extends StatelessWidget {
     required this.onChanged,
   });
 
-  Widget _flag(String url) => Image.network(
-        url,
-        width: 28,
-        height: 28,
-        errorBuilder: (_, __, ___) =>
-            const Icon(Icons.flag_outlined, size: 24),
-      );
-
   @override
   Widget build(BuildContext context) {
-    return PopupMenuButton<_Country>(
-      onSelected: onChanged,
-      color: AppColors.surface,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      offset: const Offset(0, 52),
-      itemBuilder: (_) => countries
-          .map(
-            (c) => PopupMenuItem<_Country>(
-              value: c,
-              child: Row(
-                children: [
-                  _flag(c.flagUrl),
-                  const SizedBox(width: 10),
-                  Text(c.name, style: AppTypography.bodyMedium),
-                  const SizedBox(width: 6),
-                  Text(
-                    c.prefix,
-                    style: AppTypography.bodySmall
-                        .copyWith(color: AppColors.textTertiary),
-                  ),
-                ],
-              ),
-            ),
-          )
-          .toList(),
+    return GestureDetector(
+      onTap: () => _showPicker(context),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _flag(selected.flagUrl),
+            Text(selected.flag, style: const TextStyle(fontSize: 24)),
             const SizedBox(width: 4),
             const Icon(Icons.arrow_drop_down,
                 size: 20, color: AppColors.textTertiary),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showPicker(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      isScrollControlled: true,
+      builder: (_) => DraggableScrollableSheet(
+        initialChildSize: 0.55,
+        minChildSize: 0.35,
+        maxChildSize: 0.85,
+        expand: false,
+        builder: (ctx, scrollController) => Column(
+          children: [
+            const SizedBox(height: 12),
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.textTertiary.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              child: Text('Выберите страну', style: AppTypography.titleMedium),
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: ListView.separated(
+                controller: scrollController,
+                itemCount: countries.length,
+                separatorBuilder: (_, __) =>
+                    const Divider(height: 1, indent: 56),
+                itemBuilder: (_, i) {
+                  final c = countries[i];
+                  final isSelected =
+                      c.prefix == selected.prefix && c.name == selected.name;
+                  return ListTile(
+                    leading: Text(c.flag, style: const TextStyle(fontSize: 28)),
+                    title: Text(c.name, style: AppTypography.bodyMedium),
+                    trailing: Text(c.prefix,
+                        style: AppTypography.bodySmall
+                            .copyWith(color: AppColors.textTertiary)),
+                    selected: isSelected,
+                    selectedTileColor:
+                        AppColors.primary.withValues(alpha: 0.06),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      onChanged(c);
+                    },
+                  );
+                },
+              ),
+            ),
           ],
         ),
       ),

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
@@ -12,10 +13,12 @@ import 'auth_service.dart';
 const _wsBase = 'wss://donskih-cdn.ru/api/v1/chat/ws';
 const _httpBase = 'https://donskih-cdn.ru/api/v1/chat';
 
-class ChatService {
+class ChatService with WidgetsBindingObserver {
   static final ChatService _instance = ChatService._();
   factory ChatService() => _instance;
-  ChatService._();
+  ChatService._() {
+    WidgetsBinding.instance.addObserver(this);
+  }
 
   final _auth = AuthService();
   final _controller = StreamController<List<ChatMessage>>.broadcast();
@@ -26,6 +29,7 @@ class ChatService {
   bool _connected = false;
   Timer? _pingTimer;
   Timer? _reconnectTimer;
+  bool _appInForeground = true;
 
   String? _currentUserId;
 
@@ -35,11 +39,41 @@ class ChatService {
   String? get currentUserId => _currentUserId;
 
   // ---------------------------------------------------------------------------
+  // App lifecycle — disconnect WebSocket when app goes to background
+  // so the server marks user as offline and sends push notifications.
+  // ---------------------------------------------------------------------------
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      _appInForeground = false;
+      debugPrint('ChatService: app backgrounded — closing WebSocket');
+      _disconnectForBackground();
+    } else if (state == AppLifecycleState.resumed) {
+      _appInForeground = true;
+      debugPrint('ChatService: app resumed — reconnecting WebSocket');
+      connect();
+    }
+  }
+
+  void _disconnectForBackground() {
+    _pingTimer?.cancel();
+    _reconnectTimer?.cancel();
+    _sub?.cancel();
+    try {
+      _channel?.sink.close();
+    } catch (_) {}
+    _connected = false;
+  }
+
+  // ---------------------------------------------------------------------------
   // Connection lifecycle
   // ---------------------------------------------------------------------------
 
   Future<void> connect() async {
     if (_connected) return;
+    if (!_appInForeground) return;
 
     final token = await _auth.accessToken;
     if (token == null) return;
@@ -83,7 +117,7 @@ class ChatService {
 
   void _startPing() {
     _pingTimer?.cancel();
-    _pingTimer = Timer.periodic(const Duration(seconds: 25), (_) {
+    _pingTimer = Timer.periodic(const Duration(seconds: 3), (_) {
       try {
         _channel?.sink.add('ping');
       } catch (_) {}
@@ -105,8 +139,10 @@ class ChatService {
   }
 
   void _scheduleReconnect() {
+    if (!_appInForeground) return;
     _reconnectTimer?.cancel();
     _reconnectTimer = Timer(const Duration(seconds: 4), () async {
+      if (!_appInForeground) return;
       final token = await _auth.accessToken;
       if (token != null) _openSocket(token);
     });

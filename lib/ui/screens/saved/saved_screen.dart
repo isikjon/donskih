@@ -72,11 +72,23 @@ class _SavedScreenState extends State<SavedScreen> {
   }
 
   void _openVideo(ContentItemDto item) {
-    final url = item.url?.trim();
-    if (url == null || url.isEmpty) return;
+    // Prefer first sub-item URL if available, fall back to main URL
+    String? url;
+    if (item.subItems.isNotEmpty) {
+      final firstSub = item.subItems.first;
+      url = firstSub.url?.trim();
+    }
+    url = (url != null && url.isNotEmpty) ? url : item.url?.trim();
+
+    if (url == null || url.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Видео ещё не загружено')),
+      );
+      return;
+    }
     Navigator.of(context).push(MaterialPageRoute(
       builder: (_) => VideoPlayerScreen(
-        videoUrl: url,
+        videoUrl: url!,
         title: item.title,
         description: item.subtitle,
       ),
@@ -85,11 +97,23 @@ class _SavedScreenState extends State<SavedScreen> {
 
   Future<void> _openChecklist(ContentItemDto item) async {
     final url = item.url?.trim();
-    if (url == null || url.isEmpty) return;
+    if (url == null || url.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('PDF ещё не загружен')),
+        );
+      }
+      return;
+    }
     final uri = Uri.tryParse(url);
     if (uri == null) return;
-    if (!await launchUrl(uri, mode: LaunchMode.inAppBrowserView)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    try {
+      var opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!opened) {
+        await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
+      }
+    } catch (_) {
+      // ignore
     }
   }
 
@@ -176,12 +200,35 @@ class _SavedCard extends StatelessWidget {
     if (uri == null) return null;
     if (uri.path.endsWith('/index.m3u8')) {
       return uri
-          .replace(path: uri.path.replaceFirst(RegExp(r'/index\.m3u8$'), '/thumb.jpg'))
+          .replace(
+              path:
+                  uri.path.replaceFirst(RegExp(r'/index\.m3u8$'), '/thumb.jpg'))
           .toString();
     }
     if (uri.path.toLowerCase().endsWith('.pdf')) {
       return uri
-          .replace(path: uri.path.replaceFirst(RegExp(r'\.pdf$', caseSensitive: false), '.jpg'))
+          .replace(
+              path: uri.path.replaceFirst(
+                  RegExp(r'\.pdf$', caseSensitive: false), '.jpg'))
+          .toString();
+    }
+    return null;
+  }
+
+  String? _subItemThumb() {
+    if (item.subItems.isEmpty) return null;
+    final first = item.subItems.first;
+    if (first.thumbnailUrl?.trim().isNotEmpty == true) {
+      return first.thumbnailUrl;
+    }
+    final u = first.url?.trim();
+    if (u == null) return null;
+    final uri = Uri.tryParse(u);
+    if (uri != null && uri.path.endsWith('/index.m3u8')) {
+      return uri
+          .replace(
+              path:
+                  uri.path.replaceFirst(RegExp(r'/index\.m3u8$'), '/thumb.jpg'))
           .toString();
     }
     return null;
@@ -189,7 +236,7 @@ class _SavedCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final thumbUrl = _thumbnailUrl();
+    final thumbUrl = _subItemThumb() ?? _thumbnailUrl();
     final dateLabel = ContentItemDto.formatDisplayDate(item.displayDate);
 
     return GestureDetector(
@@ -206,6 +253,7 @@ class _SavedCard extends StatelessWidget {
           ],
         ),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             ClipRRect(
               borderRadius: BorderRadius.circular(10),
@@ -246,16 +294,17 @@ class _SavedCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(item.title,
-                      style: AppTypography.titleSmall,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis),
-                  const SizedBox(height: 2),
                   Text(
                     dateLabel,
                     style: AppTypography.labelSmall
                         .copyWith(color: AppColors.textTertiary),
                   ),
+                  const SizedBox(height: 2),
+                  Text(item.title,
+                      style: AppTypography.titleSmall
+                          .copyWith(fontWeight: FontWeight.w600),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis),
                 ],
               ),
             ),

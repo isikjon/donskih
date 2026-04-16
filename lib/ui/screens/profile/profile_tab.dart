@@ -8,6 +8,7 @@ import '../../../core/theme/app_typography.dart';
 import '../../components/app_avatar.dart';
 import '../../components/app_card.dart';
 import '../saved/saved_screen.dart';
+import 'notification_settings_screen.dart';
 
 class ProfileTab extends StatefulWidget {
   const ProfileTab({super.key});
@@ -120,8 +121,7 @@ class _ProfileTabState extends State<ProfileTab> {
                           ],
                         ),
                 ),
-                if (!_isLoading &&
-                    _user?['telegram_account'] == null) ...[
+                if (!_isLoading && _user?['telegram_account'] == null) ...[
                   const SizedBox(height: 16),
                   _buildLinkTelegramCard(),
                 ],
@@ -130,8 +130,7 @@ class _ProfileTabState extends State<ProfileTab> {
                   decoration: BoxDecoration(
                     color: AppColors.surface,
                     borderRadius: BorderRadius.circular(16),
-                    border:
-                        Border.all(color: AppColors.border, width: 0.5),
+                    border: Border.all(color: AppColors.border, width: 0.5),
                     boxShadow: const [
                       BoxShadow(
                           color: AppColors.shadow,
@@ -153,8 +152,13 @@ class _ProfileTabState extends State<ProfileTab> {
                       const Divider(height: 1, indent: 56),
                       ListCard(
                         title: 'Уведомления',
+                        subtitle: 'Настройка Push-уведомлений',
                         icon: Icons.notifications_outlined,
-                        onTap: () {},
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                              builder: (_) =>
+                                  const NotificationSettingsScreen()),
+                        ),
                       ),
                       const Divider(height: 1, indent: 56),
                       ListCard(
@@ -199,8 +203,7 @@ class _ProfileTabState extends State<ProfileTab> {
                 decoration: BoxDecoration(
                   color: AppColors.surface,
                   borderRadius: BorderRadius.circular(16),
-                  border:
-                      Border.all(color: AppColors.border, width: 0.5),
+                  border: Border.all(color: AppColors.border, width: 0.5),
                   boxShadow: const [
                     BoxShadow(
                         color: AppColors.shadow,
@@ -240,15 +243,13 @@ class _ProfileTabState extends State<ProfileTab> {
         ),
         child: Row(
           children: [
-            const Icon(Icons.telegram,
-                color: Color(0xFF0088CC), size: 24),
+            const Icon(Icons.telegram, color: Color(0xFF0088CC), size: 24),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Привязать Telegram',
-                      style: AppTypography.titleSmall),
+                  Text('Привязать Telegram', style: AppTypography.titleSmall),
                   const SizedBox(height: 2),
                   Text(
                     'Нажмите Start в боте и поделитесь контактом',
@@ -278,8 +279,7 @@ class _ProfileTabState extends State<ProfileTab> {
       context: context,
       builder: (_) => AlertDialog(
         backgroundColor: AppColors.surface,
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text('Очистить кэш'),
         content: const Text(
             'Будут удалены все загруженные изображения и файлы. Продолжить?'),
@@ -305,8 +305,7 @@ class _ProfileTabState extends State<ProfileTab> {
                 );
               }
             },
-            child:
-                Text('Очистить', style: TextStyle(color: AppColors.error)),
+            child: Text('Очистить', style: TextStyle(color: AppColors.error)),
           ),
         ],
       ),
@@ -333,8 +332,7 @@ class _ProfileTabState extends State<ProfileTab> {
       context: context,
       builder: (_) => AlertDialog(
         backgroundColor: AppColors.surface,
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text('Выход'),
         content: const Text('Вы уверены, что хотите выйти?'),
         actions: [
@@ -351,8 +349,7 @@ class _ProfileTabState extends State<ProfileTab> {
                     .pushNamedAndRemoveUntil('/', (_) => false);
               }
             },
-            child: Text('Выйти',
-                style: TextStyle(color: AppColors.error)),
+            child: Text('Выйти', style: TextStyle(color: AppColors.error)),
           ),
         ],
       ),
@@ -380,8 +377,7 @@ class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
   void initState() {
     super.initState();
     _controller.addListener(() {
-      final match =
-          _controller.text.trim().toLowerCase() == _confirmText;
+      final match = _controller.text.trim().toLowerCase() == _confirmText;
       if (match != _confirmed) setState(() => _confirmed = match);
     });
   }
@@ -409,8 +405,7 @@ class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       title: Row(
         children: [
-          Icon(Icons.warning_amber_rounded,
-              color: AppColors.error, size: 24),
+          Icon(Icons.warning_amber_rounded, color: AppColors.error, size: 24),
           const SizedBox(width: 8),
           const Expanded(child: Text('Удаление аккаунта')),
         ],
@@ -428,8 +423,8 @@ class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
             const SizedBox(height: 12),
             Text(
               'При удалении аккаунта:',
-              style: AppTypography.bodySmall
-                  .copyWith(fontWeight: FontWeight.w600),
+              style:
+                  AppTypography.bodySmall.copyWith(fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 6),
             _bulletPoint('Все ваши личные данные будут удалены'),
@@ -445,8 +440,7 @@ class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
             ),
             const SizedBox(height: 4),
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
                 color: AppColors.surfaceSecondary,
                 borderRadius: BorderRadius.circular(6),
@@ -468,8 +462,8 @@ class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
                 hintText: 'Введите текст подтверждения',
                 hintStyle: AppTypography.bodySmall
                     .copyWith(color: AppColors.textTertiary),
-                contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 12, vertical: 10),
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10),
                   borderSide: const BorderSide(color: AppColors.border),
@@ -480,8 +474,7 @@ class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10),
-                  borderSide:
-                      BorderSide(color: AppColors.error, width: 1.5),
+                  borderSide: BorderSide(color: AppColors.error, width: 1.5),
                 ),
               ),
             ),
@@ -491,8 +484,8 @@ class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
       actions: [
         TextButton(
           onPressed: _deleting ? null : () => Navigator.pop(context),
-          child: Text('Отмена',
-              style: TextStyle(color: AppColors.textSecondary)),
+          child:
+              Text('Отмена', style: TextStyle(color: AppColors.textSecondary)),
         ),
         FilledButton(
           onPressed: (_confirmed && !_deleting) ? _delete : null,
@@ -520,8 +513,7 @@ class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('  •  ',
-              style: AppTypography.bodySmall
-                  .copyWith(color: AppColors.error)),
+              style: AppTypography.bodySmall.copyWith(color: AppColors.error)),
           Expanded(
             child: Text(text,
                 style: AppTypography.bodySmall
